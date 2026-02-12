@@ -1,0 +1,58 @@
+{
+  "name": "cognitree",
+  "displayName": "Cognitree",
+  "description": "Agent-first IDE wrapper for Qwen Code",
+  "version": "0.0.1",
+  "publisher": "cognitree",
+  "engines": {
+    "vscode": "^1.109.0"
+  },
+  "categories": [
+    "Other"
+  ],
+
+  "activationEvents": [
+    "onCommand:cognitree.start",
+    "onCommand:cognitree.send",
+    "onCommand:cognitree.stop"
+  ],
+
+  "main": "./out/extension.js",
+
+  "contributes": {
+    "commands": [
+      {
+        "command": "cognitree.start",
+        "title": "Cognitree: Start"
+      },
+      {
+        "command": "cognitree.send",
+        "title": "Cognitree: Send"
+      },
+      {
+        "command": "cognitree.stop",
+        "title": "Cognitree: Stop"
+      }
+    ]
+  },
+
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+
+  "devDependencies": {
+    "@types/vscode": "^1.109.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
+    "eslint": "^9.39.2",
+    "typescript": "^5.9.3",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}
