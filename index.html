@@ -610,7 +610,14 @@ main {
   box-shadow: 0 0 40px color-mix(in srgb, var(--cc) 10%, transparent);
 }
 
-.compat-emoji { font-size: 36px; display: block; margin-bottom: 16px; /* FIXED: 8px grid system */ }
+.compat-logo {
+  width: 48px;
+  height: 48px;
+  display: block;
+  margin: 0 auto 16px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.4));
+}
 .compat-name { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 8px; }
 .compat-method {
   font-family: 'JetBrains Mono', monospace;
@@ -917,21 +924,21 @@ Decision: JWT over sessions (stateless req)
     <div class="compat-grid">
 
       <div class="compat-card" style="--cc: #00c8ff">
-        <span class="compat-emoji">🔵</span>
+        <img src="https://raw.githubusercontent.com/mrxvaau/Cognitree/main/model/Claude_logo.png" alt="Claude Code" class="compat-logo">
         <div class="compat-name">Claude Code</div>
         <div class="compat-method">CLAUDE.md + System Prompt</div>
         <div class="compat-detail">Memory injected via CLAUDE.md project file and system prompt prepending per session.</div>
       </div>
 
       <div class="compat-card" style="--cc: #a855f7">
-        <span class="compat-emoji">🟣</span>
+        <img src="https://raw.githubusercontent.com/mrxvaau/Cognitree/main/model/Qwen_logo.png" alt="Qwen Code" class="compat-logo">
         <div class="compat-name">Qwen Code</div>
         <div class="compat-method">Context File Injection</div>
         <div class="compat-detail">Structured memory blocks prepended to context window before every prompt execution.</div>
       </div>
 
       <div class="compat-card" style="--cc: #4285f4">
-        <span class="compat-emoji">🔷</span>
+        <img src="https://raw.githubusercontent.com/mrxvaau/Cognitree/main/model/Gemini_CLI_logo.svg" alt="Gemini CLI" class="compat-logo">
         <div class="compat-name">Gemini CLI</div>
         <div class="compat-method">GEMINI.md + State API</div>
         <div class="compat-detail">GEMINI.md memory file plus persistent session state via Cognitree's local store API.</div>
