@@ -458,34 +458,80 @@ DECISION: JWT over sessions — stateless requirement
   <section class="checkpoint-section reveal">
     <div class="section-eyebrow">Versioned Cognition</div>
     <h2 class="section-title">Checkpoint & Branch System</h2>
-    <p class="section-desc">Every prompt is a commit. Every mistake creates a branch. The AI never knows it failed — but the system remembers everything and forwards the warning.</p>
+    <p class="section-desc">Every prompt is a commit growing downward. Branch from any node, on any branch, at any depth. Every node stays intact forever — unless you delete it manually.</p>
 
     <div class="checkpoint-visual">
-      <div class="tree-label">// CHECKPOINT TREE — EXAMPLE</div>
+      <div class="tree-label">// THE COGNITREE — HOW IT GROWS</div>
 
-      <div class="tree-line" style="color:#00f0ff">● 0 (BASE) <span style="color:#3a3d5a">→</span> <span style="color:#e8eaf0">1 → 2 → 3 → 4 → 5 → 6 → 7</span> <span style="color:#52536b; font-size:11px">← trunk</span></div>
-      <div class="tree-line" style="padding-left:32px; color:#3a3d5a; font-size:12px">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└─ <span style="color:#8b5cf6">8a → 9a → <span style="color:#f43f5e;text-decoration:line-through;opacity:0.7">10a</span></span> <span style="color:#52536b; font-size:11px">← failed, branched from 7</span></div>
-      <div class="tree-line" style="padding-left:32px; color:#3a3d5a; font-size:12px">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└─ <span style="color:#10b981">8b → 9b → 10b → 11b ●</span> <span style="color:#52536b; font-size:11px">← active</span></div>
+      <pre style="font-family:'JetBrains Mono',monospace; font-size:12.5px; line-height:1.95; overflow-x:auto; color:#52536b;">
+<span style="color:#00f0ff">  ● 1</span>  <span style="color:#3a3d5a">← root · all sessions begin here</span>
+<span style="color:#00f0ff">  │</span>
+<span style="color:#00f0ff">  ● 2</span>
+<span style="color:#00f0ff">  │</span>
+<span style="color:#00f0ff">  ● 3</span>
+<span style="color:#00f0ff">  │</span>
+<span style="color:#00f0ff">  ● 4</span>
+<span style="color:#00f0ff">  │</span>
+<span style="color:#00f0ff">  ● 5</span>
+<span style="color:#00f0ff">  │</span>
+<span style="color:#00f0ff">  ● 6</span>
+<span style="color:#00f0ff">  │</span>
+<span style="color:#00f0ff">  ● 7</span>  <span style="color:#3a3d5a">← developer rewinds here, not happy with direction</span>
+<span style="color:#00f0ff">  │</span><span style="color:#8b5cf6">\</span>
+<span style="color:#00f0ff">  │</span> <span style="color:#8b5cf6">\</span>
+<span style="color:#00f0ff">  ● 8</span> <span style="color:#8b5cf6">● 8a</span>  <span style="color:#3a3d5a">← new branch from 7, trunk continues untouched</span>
+<span style="color:#00f0ff">  │</span> <span style="color:#8b5cf6">│</span>
+<span style="color:#00f0ff">  ● 9</span> <span style="color:#8b5cf6">● 9a</span>
+<span style="color:#00f0ff">  │</span> <span style="color:#8b5cf6">│</span><span style="color:#f43f5e">\</span>
+<span style="color:#00f0ff">  │</span> <span style="color:#8b5cf6">│</span> <span style="color:#f43f5e">\</span>
+<span style="color:#00f0ff">  ●10</span> <span style="color:#f43f5e">✕10a</span> <span style="color:#f43f5e">● 10b</span>  <span style="color:#3a3d5a">← 10a failed · branch again from 9a · branch of a branch</span>
+<span style="color:#00f0ff">  │</span>      <span style="color:#f43f5e">│</span>
+<span style="color:#00f0ff">  ●11</span>     <span style="color:#f43f5e">● 11b</span>  <span style="color:#3a3d5a">← all nodes alive · developer switches freely</span>
+<span style="color:#00f0ff">  │</span>      <span style="color:#f43f5e">│</span><span style="color:#a78bfa">\</span>
+<span style="color:#00f0ff">  │</span>      <span style="color:#f43f5e">│</span> <span style="color:#a78bfa">\</span>
+<span style="color:#00f0ff">  ●12</span>    <span style="color:#f43f5e">●12b</span> <span style="color:#a78bfa">● 12c</span>  <span style="color:#3a3d5a">← branch of branch of branch · unlimited depth</span>
+      </pre>
 
       <hr class="tree-divider">
 
-      <div class="tree-label" style="margin-bottom:10px">// WHAT THE AI SEES AT 11b</div>
-      <div style="font-size:12px; line-height:2.2; color:#52536b">
-        <span style="color:#10b981">✓ visible:</span> &nbsp;0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8b → 9b → 10b → 11b<br>
-        <span style="color:#f43f5e">✗ hidden:</span> &nbsp;&nbsp;8a, 9a, 10a &nbsp;(sibling branch — causally isolated)<br>
-        <span style="color:#f59e0b">⚠ injected:</span> &nbsp;warnings from 10a forwarded into 8b at branch creation
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:24px;">
+
+        <div>
+          <div class="tree-label" style="margin-bottom:12px">// SWITCHING TO ANY NODE</div>
+          <div style="font-size:12px; line-height:2.2; color:#52536b">
+            <span style="color:#00f0ff">→</span> Jump to <strong style="color:#e8eaf0">10b</strong> — loads memory from 1→2→3...→9a→10b<br>
+            <span style="color:#00f0ff">→</span> Jump to <strong style="color:#e8eaf0">8</strong> &nbsp;— loads memory from 1→2→3...→7→8<br>
+            <span style="color:#00f0ff">→</span> Jump to <strong style="color:#e8eaf0">12c</strong> — loads full lineage + all ancestor lessons<br>
+            <span style="color:#00f0ff">→</span> Nothing on other branches is touched or broken<br>
+            <span style="color:#00f0ff">→</span> Switch back anytime — every node is self-contained
+          </div>
+        </div>
+
+        <div>
+          <div class="tree-label" style="margin-bottom:12px">// WHAT EACH NODE CARRIES</div>
+          <div style="font-size:12px; line-height:2.2; color:#52536b">
+            <span style="color:#10b981">✓</span> All 9 memory layers at that exact moment<br>
+            <span style="color:#10b981">✓</span> Mistakes + Warnings from every ancestor<br>
+            <span style="color:#10b981">✓</span> Warnings forwarded from failed sibling branches<br>
+            <span style="color:#10b981">✓</span> Code state delta from parent checkpoint<br>
+            <span style="color:#f43f5e">✗</span> Sibling and descendant branches — invisible to AI
+          </div>
+        </div>
+
       </div>
 
       <div class="checkpoint-schema">
         <div class="schema-block">
           <div class="schema-title">Checkpoint Structure</div>
-          <div class="schema-line"><span style="color:#e8eaf0">id</span>: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#10b981">"cp_11b_a3f9"</span></div>
-          <div class="schema-line"><span style="color:#e8eaf0">parent_id</span>: &nbsp;<span style="color:#10b981">"cp_10b_..."</span></div>
-          <div class="schema-line"><span style="color:#e8eaf0">branch_id</span>: &nbsp;<span style="color:#10b981">"branch-b"</span></div>
-          <div class="schema-line"><span style="color:#e8eaf0">is_base</span>: &nbsp;&nbsp;&nbsp;<span style="color:#10b981">false</span> <span style="color:#52536b"> // full snap every 10</span></div>
-          <div class="schema-line"><span style="color:#e8eaf0">confidence</span>: <span style="color:#10b981">0.87</span> <span style="color:#52536b"> // branch health 0-1</span></div>
-          <div class="schema-line"><span style="color:#e8eaf0">memory_delta</span>: <span style="color:#10b981">{...}</span> <span style="color:#52536b"> // changed layers only</span></div>
-          <div class="schema-line"><span style="color:#e8eaf0">code_delta</span>: &nbsp;<span style="color:#10b981">[...]</span> <span style="color:#52536b"> // file diffs only</span></div>
+          <div class="schema-line"><span style="color:#e8eaf0">id</span>:            <span style="color:#10b981">"cp_12c_f7a2"</span></div>
+          <div class="schema-line"><span style="color:#e8eaf0">parent_id</span>:    <span style="color:#10b981">"cp_11b_..."</span></div>
+          <div class="schema-line"><span style="color:#e8eaf0">branch_id</span>:    <span style="color:#10b981">"branch-c"</span></div>
+          <div class="schema-line"><span style="color:#e8eaf0">depth</span>:         <span style="color:#10b981">3</span> <span style="color:#52536b">// branch of branch of branch</span></div>
+          <div class="schema-line"><span style="color:#e8eaf0">is_base</span>:       <span style="color:#10b981">false</span> <span style="color:#52536b">// full snap every 10</span></div>
+          <div class="schema-line"><span style="color:#e8eaf0">confidence</span>:    <span style="color:#10b981">0.91</span> <span style="color:#52536b">// branch health 0–1</span></div>
+          <div class="schema-line"><span style="color:#e8eaf0">memory_delta</span>:  <span style="color:#10b981">{...}</span> <span style="color:#52536b">// changed layers only</span></div>
+          <div class="schema-line"><span style="color:#e8eaf0">code_delta</span>:    <span style="color:#10b981">[...]</span> <span style="color:#52536b">// file diffs only</span></div>
+          <div class="schema-line"><span style="color:#e8eaf0">deleted</span>:       <span style="color:#10b981">false</span> <span style="color:#52536b">// manual delete only</span></div>
         </div>
         <div class="schema-block">
           <div class="schema-title">Delta Storage</div>
@@ -493,8 +539,8 @@ DECISION: JWT over sessions — stateless requirement
             <span style="color:#00f0ff">●</span> Full snapshot every 10 checkpoints<br>
             <span style="color:#8b5cf6">●</span> Diffs only between base snapshots<br>
             <span style="color:#10b981">●</span> Unchanged files referenced, never copied<br>
-            <span style="color:#f59e0b">●</span> Reconstruct = walk back to nearest base<br>
-            <span style="color:#f43f5e">●</span> Dead branches kept — teach future sessions<br>
+            <span style="color:#f59e0b">●</span> Reconstruct = walk ancestors to nearest base<br>
+            <span style="color:#f43f5e">●</span> All nodes permanent unless manually deleted<br>
             <span style="color:#06b6d4">●</span> ~95% storage reduction vs full snapshots
           </div>
         </div>
