@@ -230,7 +230,7 @@ body::after {
 /* CTA buttons */
 .cta-row {
   display: flex;
-  gap: 14px;
+  gap: 24px; /* FIXED: Standardized 24px spacing for layouts */ /* FIXED: 8px grid system */
   flex-wrap: wrap;
   justify-content: center;
   animation: heroFade 1s 0.4s ease both;
@@ -239,9 +239,9 @@ body::after {
 
 .btn {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 13px;
+  font-size: 14px; /* FIXED: Accessibility & alignment */
   font-weight: 500;
-  padding: 13px 28px;
+  padding: 12px 24px; /* FIXED: 8px grid system */
   border-radius: 3px;
   border: none;
   cursor: none;
@@ -327,16 +327,16 @@ main {
   z-index: 1;
   max-width: 1080px;
   margin: 0 auto;
-  padding: 100px 24px;
+  padding: 120px 24px; /* FIXED: Section vertical rhythm */
 }
 
 .section-eyebrow {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: 12px; /* FIXED: Readability */
   letter-spacing: 3px;
   text-transform: uppercase;
   color: var(--cyan);
-  margin-bottom: 14px;
+  margin-bottom: 16px; /* FIXED: 8px grid system */
   display: flex;
   align-items: center;
   gap: 10px;
@@ -361,12 +361,12 @@ main {
   font-size: 15px;
   color: #6b6e8a;
   max-width: 520px;
-  line-height: 1.7;
-  margin-bottom: 56px;
+  line-height: 1.6; /* FIXED: Optical text alignment */
+  margin-bottom: 64px; /* FIXED: Section title breathing room */
 }
 
 /* ── How it works ── */
-.how-section { margin-bottom: 120px; }
+.how-section { margin-bottom: 128px; /* FIXED: 8px scale spacing */ }
 
 .pipeline {
   position: relative;
@@ -385,9 +385,9 @@ main {
   display: flex;
   gap: 28px;
   align-items: flex-start;
-  margin-bottom: 40px;
+  margin-bottom: 48px; /* FIXED: 8px spacing scale */
   position: relative;
-  padding: 28px 28px 28px 80px;
+  padding: 32px 32px 32px 96px; /* FIXED: 8px padding + icon clearance */
   border: 1px solid var(--border);
   background: var(--card);
   border-radius: 4px;
@@ -403,7 +403,7 @@ main {
 
 .step-num-badge {
   position: absolute;
-  left: -1px; top: 24px;
+  left: -1px; top: 32px; /* FIXED: Align with vertical padding */
   width: 56px;
   height: 36px;
   display: flex; align-items: center; justify-content: center;
@@ -418,7 +418,7 @@ main {
 
 .step-icon-wrap {
   position: absolute;
-  left: 56px; top: 24px;
+  left: 72px; top: 32px; /* FIXED: Optical centering with text block */
   font-size: 20px;
   opacity: 0.9;
 }
@@ -438,7 +438,7 @@ main {
 }
 
 .step-code {
-  margin-top: 14px;
+  margin-top: 16px; /* FIXED: Align code block to grid */
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
   background: var(--bg);
@@ -452,12 +452,12 @@ main {
 }
 
 /* ── Memory layers ── */
-.layers-section { margin-bottom: 120px; }
+.layers-section { margin-bottom: 128px; /* FIXED: 8px scale spacing */ }
 
 .layers-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
+  gap: 24px; /* FIXED: Standardized 24px spacing for layouts */
 }
 
 @media (max-width: 640px) {
@@ -470,7 +470,7 @@ main {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 28px;
+  padding: 32px; /* FIXED: 8px container padding scale */
   cursor: default;
   transition: all 0.3s ease;
   position: relative;
@@ -527,30 +527,30 @@ main {
   font-size: 20px;
   font-weight: 700;
   color: #fff;
-  margin-bottom: 10px;
+  margin-bottom: 12px; /* FIXED: Title-to-desc visual balance */
   letter-spacing: -0.5px;
 }
 
 .l-desc {
-  font-size: 13px;
+  font-size: 14px; /* FIXED: Accessibility & alignment */
   color: var(--muted);
   line-height: 1.65;
-  margin-bottom: 20px;
+  margin-bottom: 24px; /* FIXED: 8px grid spacing */
 }
 
 .l-items {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px; /* FIXED: Clean grid increment */
 }
 
 .l-item {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11.5px;
+  font-size: 12px; /* FIXED: Accessibility standard */
   color: #4a4d6a;
   background: rgba(255,255,255,0.02);
   border: 1px solid var(--border);
-  padding: 7px 12px;
+  padding: 8px 12px; /* FIXED: Vertical rhythm inside items */
   border-radius: 3px;
   display: flex; gap: 8px; align-items: flex-start;
   transition: all 0.2s ease;
@@ -569,12 +569,12 @@ main {
 }
 
 /* ── Compatibility ── */
-.compat-section { margin-bottom: 120px; }
+.compat-section { margin-bottom: 128px; /* FIXED: 8px scale spacing */ }
 
 .compat-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  gap: 24px; /* FIXED: Standardized 24px spacing for layouts */
 }
 
 @media (max-width: 700px) {
@@ -610,20 +610,20 @@ main {
   box-shadow: 0 0 40px color-mix(in srgb, var(--cc) 10%, transparent);
 }
 
-.compat-emoji { font-size: 36px; display: block; margin-bottom: 14px; }
+.compat-emoji { font-size: 36px; display: block; margin-bottom: 16px; /* FIXED: 8px grid system */ }
 .compat-name { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 8px; }
 .compat-method {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: 12px; /* FIXED: Readability */
   color: var(--cc);
   letter-spacing: 1px;
-  margin-bottom: 10px;
+  margin-bottom: 12px; /* FIXED: Title-to-desc visual balance */
   text-transform: uppercase;
 }
-.compat-detail { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.compat-detail { font-size: 14px; /* FIXED: Accessibility & alignment */ color: var(--muted); line-height: 1.5; }
 
 /* ── Comparison ── */
-.comparison-section { margin-bottom: 120px; }
+.comparison-section { margin-bottom: 128px; /* FIXED: 8px scale spacing */ }
 
 .comparison-grid {
   display: grid;
@@ -651,9 +651,9 @@ main {
 
 .cmp-row {
   display: flex; align-items: flex-start; gap: 12px;
-  padding: 11px 0;
+  padding: 12px 0; /* FIXED: 8px grid alignment */
   border-bottom: 1px solid rgba(255,255,255,0.03);
-  font-size: 13.5px; color: #5a5e7a; line-height: 1.5;
+  font-size: 14px; /* FIXED: Visual balance with icons */ color: #5a5e7a; line-height: 1.5;
 }
 .cmp-row:last-child { border-bottom: none; }
 
@@ -665,7 +665,7 @@ footer {
   border-top: 1px solid var(--border);
   padding: 40px 24px;
   display: flex; justify-content: space-between; align-items: center;
-  flex-wrap: wrap; gap: 16px;
+  flex-wrap: wrap; gap: 24px; /* FIXED: Standardized 24px spacing for layouts */
   max-width: 1080px; margin: 0 auto;
 }
 
@@ -683,7 +683,7 @@ footer {
 
 .footer-meta {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px; color: var(--muted);
+  font-size: 12px; /* FIXED: Readability */ color: var(--muted);
   letter-spacing: 1px;
 }
 

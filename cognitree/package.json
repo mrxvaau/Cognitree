@@ -12,9 +12,16 @@
   ],
 
   "activationEvents": [
+    "onView:cognitree.chatView",
     "onCommand:cognitree.start",
     "onCommand:cognitree.send",
-    "onCommand:cognitree.stop"
+    "onCommand:cognitree.stop",
+    "onCommand:cognitree.panel",
+    "onCommand:cognitree.logs",
+    "onCommand:cognitree.sendSelection",
+    "onCommand:cognitree.sendFile",
+    "onCommand:cognitree.generateCode",
+    "onCommand:cognitree.fixCode"
   ],
 
   "main": "./out/extension.js",
@@ -32,8 +39,102 @@
       {
         "command": "cognitree.stop",
         "title": "Cognitree: Stop"
+      },
+      {
+        "command": "cognitree.panel",
+        "title": "Cognitree: Open Panel"
+      },
+      {
+        "command": "cognitree.logs",
+        "title": "Cognitree: Show Logs"
+      },
+      {
+        "command": "cognitree.sendSelection",
+        "title": "Cognitree: Send Selection to Agent"
+      },
+      {
+        "command": "cognitree.sendFile",
+        "title": "Cognitree: Send File to Agent"
+      },
+      {
+        "command": "cognitree.generateCode",
+        "title": "Cognitree: Generate Code"
+      },
+      {
+        "command": "cognitree.fixCode",
+        "title": "Cognitree: Fix Selected Code"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Cognitree",
+      "properties": {
+        "cognitree.qwenPath": {
+          "type": "string",
+          "default": "qwen",
+          "description": "Path to the Qwen CLI executable. Can be 'qwen' if it's in PATH or a full path to the executable."
+        },
+        "cognitree.autoStart": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically start the Qwen agent when VS Code starts"
+        },
+        "cognitree.maxBufferSize": {
+          "type": "number",
+          "default": 10000,
+          "minimum": 1000,
+          "maximum": 100000,
+          "description": "Maximum buffer size for agent output (in characters)"
+        },
+        "cognitree.timeout": {
+          "type": "number",
+          "default": 30000,
+          "minimum": 5000,
+          "maximum": 120000,
+          "description": "Timeout for agent operations in milliseconds"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "cognitree-sidebar",
+          "title": "Cognitree",
+          "icon": "./icon/icon.png"
+        }
+      ]
+    },
+    "views": {
+      "cognitree-sidebar": [
+        {
+          "id": "cognitree.chatView",
+          "name": "Cognitree Chat"
+        }
+      ]
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "when": "resourceLangId != ''",
+          "command": "cognitree.sendSelection",
+          "group": "cognitree@1"
+        },
+        {
+          "when": "resourceLangId != ''",
+          "command": "cognitree.sendFile",
+          "group": "cognitree@2"
+        },
+        {
+          "when": "resourceLangId != ''",
+          "command": "cognitree.fixCode",
+          "group": "cognitree@3"
+        },
+        {
+          "when": "resourceLangId != ''",
+          "command": "cognitree.generateCode",
+          "group": "cognitree@4"
+        }
+      ]
+    }
   },
 
   "scripts": {
