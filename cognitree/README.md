@@ -1,51 +1,85 @@
-# cognitree README
+# Cognitree - Agent-first IDE wrapper for Qwen Code
 
-This is the README for your extension "cognitree". After writing up a brief description, we recommend including the following sections.
+Cognitree is a VS Code extension that provides seamless integration with the Qwen Code agent, bringing AI-powered assistance directly into your development workflow.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- **Direct Qwen Code Integration**: Communicate with the Qwen Code agent directly from VS Code
+- **Streaming Responses**: Real-time agent responses with a terminal-like feel
+- **Rich Markdown Support**: Code highlighting, formatted text, and clean output (ANSI stripped)
+- **Context-Aware Commands**: Send selected code, entire files, or generate new code with contextual awareness
+- **Interactive Panel**: Dedicated UI panel for chatting with the agent
+- **Rich Context Menu**: Right-click options to send code to the agent
+- **Comprehensive Logging**: Detailed logs for debugging and monitoring
+- **Configurable Settings**: Customize the extension behavior to your needs
 
-For example if there is an image subfolder under your extension project workspace:
+### Available Commands
 
-\!\[feature X\]\(images/feature-x.png\)
+- `Cognitree: Start` - Start the Qwen agent
+- `Cognitree: Send` - Send a custom message to the agent
+- `Cognitree: Stop` - Stop the Qwen agent
+- `Cognitree: Open Panel` - Open the interactive panel
+- `Cognitree: Show Logs` - View extension logs
+- `Cognitree: Send Selection to Agent` - Send selected code to the agent
+- `Cognitree: Send File to Agent` - Send the entire current file to the agent
+- `Cognitree: Generate Code` - Generate code based on a description
+- `Cognitree: Fix Selected Code` - Request fixes for selected code
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+### Context Menu Integration
+
+Right-click in any code file to access:
+- Send Selection to Agent
+- Send File to Agent
+- Fix Selected Code
+- Generate Code
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+- VS Code version 1.109.0 or higher
+- Qwen CLI installed and available in your PATH (or specify the path in settings)
+- Node.js environment
 
 ## Extension Settings
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
 This extension contributes the following settings:
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+* `cognitree.qwenPath`: Path to the Qwen CLI executable (default: "qwen")
+* `cognitree.autoStart`: Automatically start the Qwen agent when VS Code starts (default: false)
+* `cognitree.maxBufferSize`: Maximum buffer size for agent output (default: 10000)
+* `cognitree.timeout`: Timeout for agent operations in milliseconds (default: 30000)
+
+## Usage
+
+1. Install the extension and ensure Qwen CLI is installed
+2. Use `Cognitree: Start` to launch the agent
+3. Use `Cognitree: Open Panel` to open the interactive panel
+4. Or use context menu options to send code directly from your editor
+5. Monitor activity in the logs using `Cognitree: Show Logs`
 
 ## Known Issues
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+- The extension requires Qwen CLI to be installed separately
+- Some commands may not work if the agent is not running
+- Large files may take time to process
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
+### 0.0.2
 
-### 1.0.0
+- Added streaming support for chat responses
+- Implemented Markdown rendering in chat
+- Improved output cleanliness by stripping ANSI codes
+- Enhanced "terminal-like" experience
 
-Initial release of ...
+### 0.0.1
 
-### 1.0.1
 
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+- Initial release with basic Qwen Code integration
+- Added commands for starting, stopping, and sending messages to the agent
+- Implemented configuration options
+- Created interactive panel for agent communication
+- Added context-aware commands for sending code selections/files
+- Implemented comprehensive logging system
 
 ---
 
