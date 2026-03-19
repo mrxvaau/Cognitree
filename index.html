@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cognitree — AI Memory System</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+
+:root {
+  --bg:       #050508;
+  --surface:  #0c0c14;
+  --card:     #111120;
+  --border:   #1c1c30;
+  --border2:  #252540;
+  --cyan:     #00f0ff;
+  --violet:   #8b5cf6;
+  --emerald:  #10b981;
+  --amber:    #f59e0b;
+  --rose:     #f43f5e;
+  --text:     #e8eaf0;
+  --muted:    #52536b;
+  --dim:      #2a2a42;
+}
+
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Syne', sans-serif;
+  overflow-x: hidden;
+  cursor: none;
+}
+
+/* ── Custom cursor ── */
+.cursor {
+  position: fixed;
+  width: 10px; height: 10px;
+  background: var(--cyan);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9999;
+  mix-blend-mode: screen;
+  transition: transform 0.15s ease, opacity 0.2s;
+}
+.cursor-ring {
+  position: fixed;
+  width: 36px; height: 36px;
+  border: 1px solid rgba(0,240,255,0.35);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9998;
+  transition: transform 0.35s cubic-bezier(0.16,1,0.3,1), width 0.3s, height 0.3s, opacity 0.2s;
+}
+
+/* ── Noise overlay ── */
+body::before {
+  content:'';
+  position:fixed; inset:0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  background-size: 128px;
+  pointer-events: none;
+  z-index: 9990;
+  opacity: 0.6;
+}
+
+/* ── Grid bg ── */
+body::after {
+  content:'';
+  position:fixed; inset:0;
+  background-image:
+    linear-gradient(rgba(0,240,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,240,255,0.025) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── HERO ── */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+  padding: 40px 24px;
+  text-align: center;
+  overflow: hidden;
+}
+
+/* Radial glow behind hero */
+.hero-glow {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 700px; height: 700px;
+  background: radial-gradient(circle, rgba(0,240,255,0.06) 0%, rgba(139,92,246,0.04) 40%, transparent 70%);
+  pointer-events: none;
+}
+
+/* Orbital rings */
+.orbital-wrap {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.orbital {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(0,240,255,0.07);
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.orbital:nth-child(1) { width: 300px; height: 300px; animation: spin 20s linear infinite; }
+.orbital:nth-child(2) { width: 500px; height: 500px; animation: spin 35s linear infinite reverse; border-color: rgba(139,92,246,0.06); }
+.orbital:nth-child(3) { width: 720px; height: 720px; animation: spin 55s linear infinite; border-color: rgba(0,240,255,0.04); }
+
+.orbital-dot {
+  position: absolute;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  top: -2px; left: 50%;
+  transform: translateX(-50%);
+}
+
+.orbital:nth-child(1) .orbital-dot { background: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
+.orbital:nth-child(2) .orbital-dot { background: var(--violet); box-shadow: 0 0 10px var(--violet); top: auto; bottom: -2px; }
+.orbital:nth-child(3) .orbital-dot { background: var(--emerald); box-shadow: 0 0 10px var(--emerald); }
+
+@keyframes spin { from { transform: translate(-50%,-50%) rotate(0deg); } to { transform: translate(-50%,-50%) rotate(360deg); } }
+
+/* Logo */
+.logo-wrap {
+  position: relative;
+  margin-bottom: 32px;
+  animation: heroFade 1s ease both;
+}
+
+.logo-ring {
+  position: absolute;
+  inset: -16px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,240,255,0.15);
+  animation: pulse-ring 3s ease-in-out infinite;
+}
+
+.logo-ring2 {
+  position: absolute;
+  inset: -28px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,240,255,0.07);
+  animation: pulse-ring 3s ease-in-out infinite 0.5s;
+}
+
+@keyframes pulse-ring {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.05); }
+}
+
+.logo-img {
+  width: 88px; height: 88px;
+  border-radius: 50%;
+  display: block;
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 0 24px rgba(0,240,255,0.4));
+  transition: filter 0.3s ease, transform 0.3s ease;
+}
+
+.logo-img:hover {
+  filter: drop-shadow(0 0 40px rgba(0,240,255,0.7));
+  transform: scale(1.05);
+}
+
+.logo-fallback {
+  width: 88px; height: 88px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #00f0ff22, #8b5cf622);
+  border: 1px solid rgba(0,240,255,0.3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 36px;
+  position: relative; z-index: 1;
+  filter: drop-shadow(0 0 24px rgba(0,240,255,0.4));
+}
+
+/* Brand name */
+.brand {
+  font-size: clamp(52px, 10vw, 96px);
+  font-weight: 800;
+  letter-spacing: -3px;
+  line-height: 0.95;
+  color: #fff;
+  margin-bottom: 8px;
+  animation: heroFade 1s 0.1s ease both;
+  position: relative;
+}
+
+.brand .c { color: var(--cyan); }
+
+.brand-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 4px;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 32px;
+  animation: heroFade 1s 0.2s ease both;
+}
+
+.hero-desc {
+  max-width: 540px;
+  font-size: 17px;
+  color: #9094b0;
+  line-height: 1.65;
+  font-weight: 400;
+  margin-bottom: 48px;
+  animation: heroFade 1s 0.3s ease both;
+}
+
+.hero-desc strong { color: var(--cyan); font-weight: 600; }
+
+/* CTA buttons */
+.cta-row {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+  animation: heroFade 1s 0.4s ease both;
+  margin-bottom: 64px;
+}
+
+.btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 13px 28px;
+  border-radius: 3px;
+  border: none;
+  cursor: none;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.25s ease;
+  letter-spacing: 0.5px;
+}
+
+.btn-primary {
+  background: var(--cyan);
+  color: #050508;
+}
+
+.btn-primary:hover {
+  background: #fff;
+  box-shadow: 0 0 32px rgba(0,240,255,0.4);
+  transform: translateY(-2px);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border2);
+}
+
+.btn-ghost:hover {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  transform: translateY(-2px);
+}
+
+/* Scrolling ticker */
+.ticker {
+  width: 100%;
+  overflow: hidden;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 0;
+  animation: heroFade 1s 0.5s ease both;
+}
+
+.ticker-inner {
+  display: flex;
+  gap: 0;
+  animation: ticker 20s linear infinite;
+  white-space: nowrap;
+}
+
+.ticker-item {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 0 32px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.ticker-item .dot {
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--cyan);
+  opacity: 0.6;
+}
+
+@keyframes ticker {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes heroFade {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── MAIN CONTENT ── */
+main {
+  position: relative;
+  z-index: 1;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 100px 24px;
+}
+
+.section-eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--cyan);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-eyebrow::before {
+  content: '';
+  width: 20px; height: 1px;
+  background: var(--cyan);
+}
+
+.section-title {
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 700;
+  letter-spacing: -1.5px;
+  color: #fff;
+  margin-bottom: 16px;
+  line-height: 1.1;
+}
+
+.section-desc {
+  font-size: 15px;
+  color: #6b6e8a;
+  max-width: 520px;
+  line-height: 1.7;
+  margin-bottom: 56px;
+}
+
+/* ── How it works ── */
+.how-section { margin-bottom: 120px; }
+
+.pipeline {
+  position: relative;
+}
+
+.pipeline-line {
+  position: absolute;
+  left: 28px;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: linear-gradient(180deg, var(--cyan), var(--violet), var(--emerald));
+  opacity: 0.3;
+}
+
+.pipeline-step {
+  display: flex;
+  gap: 28px;
+  align-items: flex-start;
+  margin-bottom: 40px;
+  position: relative;
+  padding: 28px 28px 28px 80px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: 4px;
+  transition: all 0.3s ease;
+  cursor: default;
+}
+
+.pipeline-step:hover {
+  border-color: var(--step-color, var(--cyan));
+  background: color-mix(in srgb, var(--step-color, var(--cyan)) 4%, var(--card));
+  transform: translateX(6px);
+}
+
+.step-num-badge {
+  position: absolute;
+  left: -1px; top: 24px;
+  width: 56px;
+  height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--step-color, var(--cyan));
+  background: var(--bg);
+  border: 1px solid var(--step-color, var(--cyan));
+  border-left: none;
+}
+
+.step-icon-wrap {
+  position: absolute;
+  left: 56px; top: 24px;
+  font-size: 20px;
+  opacity: 0.9;
+}
+
+.step-body {}
+.step-title-s {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 8px;
+  letter-spacing: -0.5px;
+}
+.step-detail {
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.step-code {
+  margin-top: 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 12px 16px;
+  border-radius: 3px;
+  color: var(--cyan);
+  line-height: 1.6;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* ── Memory layers ── */
+.layers-section { margin-bottom: 120px; }
+
+.layers-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 640px) {
+  .layers-grid { grid-template-columns: 1fr; }
+  .pipeline-step { padding-left: 70px; }
+  .comparison-grid { grid-template-columns: 1fr; }
+}
+
+.layer-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 28px;
+  cursor: default;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.layer-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: var(--lc, var(--cyan));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.4s ease;
+}
+
+.layer-card:hover::before { transform: scaleX(1); }
+
+.layer-card:hover {
+  border-color: var(--lc, var(--cyan));
+  transform: translateY(-4px);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+}
+
+.layer-card-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 100% 0%, var(--lc, var(--cyan)) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.layer-card:hover .layer-card-glow { opacity: 0.05; }
+
+.l-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--lc, var(--cyan));
+  margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
+}
+
+.l-tag::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--lc, var(--cyan));
+  box-shadow: 0 0 8px var(--lc, var(--cyan));
+}
+
+.l-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 10px;
+  letter-spacing: -0.5px;
+}
+
+.l-desc {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.65;
+  margin-bottom: 20px;
+}
+
+.l-items {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.l-item {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  color: #4a4d6a;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  padding: 7px 12px;
+  border-radius: 3px;
+  display: flex; gap: 8px; align-items: flex-start;
+  transition: all 0.2s ease;
+}
+
+.layer-card:hover .l-item {
+  border-color: color-mix(in srgb, var(--lc, var(--cyan)) 20%, var(--border));
+  color: #7a7d9a;
+}
+
+.l-item::before {
+  content: '//';
+  color: var(--lc, var(--cyan));
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+/* ── Compatibility ── */
+.compat-section { margin-bottom: 120px; }
+
+.compat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 700px) {
+  .compat-grid { grid-template-columns: 1fr; }
+}
+
+.compat-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 32px 24px;
+  text-align: center;
+  cursor: default;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.compat-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  background: var(--cc);
+  transform: scaleX(0);
+  transition: transform 0.4s ease;
+}
+
+.compat-card:hover::after { transform: scaleX(1); }
+.compat-card:hover {
+  border-color: var(--cc);
+  transform: translateY(-4px);
+  box-shadow: 0 0 40px color-mix(in srgb, var(--cc) 10%, transparent);
+}
+
+.compat-emoji { font-size: 36px; display: block; margin-bottom: 14px; }
+.compat-name { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 8px; }
+.compat-method {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--cc);
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+.compat-detail { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+/* ── Comparison ── */
+.comparison-section { margin-bottom: 120px; }
+
+.comparison-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.cmp-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 32px;
+}
+
+.cmp-header {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 16px; font-weight: 700; color: #fff;
+  margin-bottom: 24px; padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cmp-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+
+.cmp-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  font-size: 13.5px; color: #5a5e7a; line-height: 1.5;
+}
+.cmp-row:last-child { border-bottom: none; }
+
+.cmp-icon { flex-shrink: 0; font-size: 15px; margin-top: 1px; }
+
+/* ── Footer ── */
+footer {
+  position: relative; z-index: 1;
+  border-top: 1px solid var(--border);
+  padding: 40px 24px;
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 16px;
+  max-width: 1080px; margin: 0 auto;
+}
+
+.footer-brand {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 16px; font-weight: 700; letter-spacing: -0.5px; color: #fff;
+}
+
+.footer-brand img {
+  width: 28px; height: 28px; border-radius: 50%;
+  filter: drop-shadow(0 0 6px rgba(0,240,255,0.4));
+}
+
+.footer-brand .c { color: var(--cyan); }
+
+.footer-meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--muted);
+  letter-spacing: 1px;
+}
+
+/* ── Animations ── */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+}
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+</style>
+</head>
+<body>
+
+<div class="cursor" id="cursor"></div>
+<div class="cursor-ring" id="cursorRing"></div>
+
+<!-- ═══════════════ HERO ═══════════════ -->
+<section class="hero">
+  <div class="hero-glow"></div>
+  <div class="orbital-wrap">
+    <div class="orbital"><div class="orbital-dot"></div></div>
+    <div class="orbital"><div class="orbital-dot"></div></div>
+    <div class="orbital"><div class="orbital-dot"></div></div>
+  </div>
+
+  <!-- Logo -->
+  <div class="logo-wrap">
+    <div class="logo-ring"></div>
+    <div class="logo-ring2"></div>
+    <img
+      class="logo-img"
+      src="https://raw.githubusercontent.com/mrxvaau/Cognitree/main/icon.png"
+      alt="Cognitree"
+      onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+    >
+    <div class="logo-fallback" style="display:none;">🧠</div>
+  </div>
+
+  <div class="brand"><span class="c">C</span>ognitree</div>
+  <div class="brand-sub">AI Memory System &nbsp;·&nbsp; v0.1 &nbsp;·&nbsp; Open Source</div>
+
+  <p class="hero-desc">
+    A persistent memory layer for AI coding agents.<br>
+    <strong>Reduce hallucination. Eliminate token waste.</strong><br>
+    Give LLMs precise state across every session.
+  </p>
+
+  <div class="cta-row">
+    <a href="https://github.com/mrxvaau/Cognitree" class="btn btn-primary" target="_blank">
+      ⬡ &nbsp;View on GitHub
+    </a>
+    <a href="#how-it-works" class="btn btn-ghost">
+      ↓ &nbsp;How it works
+    </a>
+  </div>
+
+  <div class="ticker">
+    <div class="ticker-inner">
+      <!-- First set -->
+      <span class="ticker-item"><span class="dot"></span>Session Memory</span>
+      <span class="ticker-item"><span class="dot"></span>Task Memory</span>
+      <span class="ticker-item"><span class="dot"></span>Project Memory</span>
+      <span class="ticker-item"><span class="dot"></span>Mistake Memory</span>
+      <span class="ticker-item"><span class="dot"></span>Context Injection</span>
+      <span class="ticker-item"><span class="dot"></span>Claude Code</span>
+      <span class="ticker-item"><span class="dot"></span>Qwen Code</span>
+      <span class="ticker-item"><span class="dot"></span>Gemini CLI</span>
+      <span class="ticker-item"><span class="dot"></span>Zero Hallucination</span>
+      <span class="ticker-item"><span class="dot"></span>Token Efficient</span>
+      <span class="ticker-item"><span class="dot"></span>Persistent State</span>
+      <span class="ticker-item"><span class="dot"></span>Cross-Session</span>
+      <!-- Duplicate for seamless loop -->
+      <span class="ticker-item"><span class="dot"></span>Session Memory</span>
+      <span class="ticker-item"><span class="dot"></span>Task Memory</span>
+      <span class="ticker-item"><span class="dot"></span>Project Memory</span>
+      <span class="ticker-item"><span class="dot"></span>Mistake Memory</span>
+      <span class="ticker-item"><span class="dot"></span>Context Injection</span>
+      <span class="ticker-item"><span class="dot"></span>Claude Code</span>
+      <span class="ticker-item"><span class="dot"></span>Qwen Code</span>
+      <span class="ticker-item"><span class="dot"></span>Gemini CLI</span>
+      <span class="ticker-item"><span class="dot"></span>Zero Hallucination</span>
+      <span class="ticker-item"><span class="dot"></span>Token Efficient</span>
+      <span class="ticker-item"><span class="dot"></span>Persistent State</span>
+      <span class="ticker-item"><span class="dot"></span>Cross-Session</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ MAIN ═══════════════ -->
+<main>
+
+  <!-- How it works -->
+  <section class="how-section reveal" id="how-it-works">
+    <div class="section-eyebrow">How it works</div>
+    <h2 class="section-title">The Cognitree Pipeline</h2>
+    <p class="section-desc">Five stages that transform a forgetful LLM into a precise, state-aware coding agent.</p>
+
+    <div class="pipeline">
+      <div class="pipeline-line"></div>
+
+      <div class="pipeline-step" style="--step-color: #00f0ff">
+        <div class="step-num-badge" style="border-color:#00f0ff; color:#00f0ff">01</div>
+        <div class="step-icon-wrap">🧠</div>
+        <div class="step-body">
+          <div class="step-title-s">LLM Completes a Task</div>
+          <div class="step-detail">Claude Code, Qwen Code, or Gemini CLI produces output — code, a decision, a fix, an explanation.</div>
+        </div>
+      </div>
+
+      <div class="pipeline-step" style="--step-color: #8b5cf6">
+        <div class="step-num-badge" style="border-color:#8b5cf6; color:#8b5cf6">02</div>
+        <div class="step-icon-wrap">⚙️</div>
+        <div class="step-body">
+          <div class="step-title-s">Memory Extractor Parses Output</div>
+          <div class="step-detail">Cognitree scans the output for decisions, errors, facts, and state changes — tagging each for its memory layer.</div>
+          <div class="step-code">extract({
+  decisions: [...],   // WHY something was done
+  errors:    [...],   // What failed
+  facts:     [...],   // What exists in the project
+  state:     {...}    // Current task state
+})</div>
+        </div>
+      </div>
+
+      <div class="pipeline-step" style="--step-color: #f59e0b">
+        <div class="step-num-badge" style="border-color:#f59e0b; color:#f59e0b">03</div>
+        <div class="step-icon-wrap">🗄️</div>
+        <div class="step-body">
+          <div class="step-title-s">Writes to Memory Store</div>
+          <div class="step-detail">Extracted data is written to a structured local memory store — layered by type, tagged by project, timestamped.</div>
+        </div>
+      </div>
+
+      <div class="pipeline-step" style="--step-color: #10b981">
+        <div class="step-num-badge" style="border-color:#10b981; color:#10b981">04</div>
+        <div class="step-icon-wrap">🎯</div>
+        <div class="step-body">
+          <div class="step-title-s">Context Injector Fires Before Next Prompt</div>
+          <div class="step-detail">Before the next session begins, Cognitree retrieves relevant memories and injects a structured block into the system prompt.</div>
+          <div class="step-code">[COGNITREE MEMORY — VoidRoom]
+Stack: JavaScript + MongoDB
+Last: Fixed auth route → /api/auth.js
+ERROR LOG: mongoose.findByIdAndDelete()
+  → use findOneAndDelete() — hallucinated
+Decision: JWT over sessions (stateless req)
+[/COGNITREE]</div>
+        </div>
+      </div>
+
+      <div class="pipeline-step" style="--step-color: #f43f5e">
+        <div class="step-num-badge" style="border-color:#f43f5e; color:#f43f5e">05</div>
+        <div class="step-icon-wrap">🚀</div>
+        <div class="step-body">
+          <div class="step-title-s">LLM Works with Perfect Precision</div>
+          <div class="step-detail">The model now knows exactly what it did, what failed, what exists, and why decisions were made — zero re-derivation, zero wasted tokens.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Memory Layers -->
+  <section class="layers-section reveal">
+    <div class="section-eyebrow">Architecture</div>
+    <h2 class="section-title">Four Memory Layers</h2>
+    <p class="section-desc">Each layer stores a different type of knowledge, queried and injected with surgical precision.</p>
+
+    <div class="layers-grid">
+
+      <div class="layer-card" style="--lc: #00f0ff">
+        <div class="layer-card-glow"></div>
+        <div class="l-tag">Layer 1 — Working</div>
+        <div class="l-title">Session Memory</div>
+        <div class="l-desc">Short-lived, high-priority context. What is happening right now in this session.</div>
+        <div class="l-items">
+          <div class="l-item">Current file being edited</div>
+          <div class="l-item">Last 5 actions taken</div>
+          <div class="l-item">Active variables & scope</div>
+        </div>
+      </div>
+
+      <div class="layer-card" style="--lc: #8b5cf6">
+        <div class="layer-card-glow"></div>
+        <div class="l-tag">Layer 2 — Episodic</div>
+        <div class="l-title">Task Memory</div>
+        <div class="l-desc">Decisions, reasoning chains, and outcomes from completed tasks. The "why" behind every choice.</div>
+        <div class="l-items">
+          <div class="l-item">Why approach X was chosen</div>
+          <div class="l-item">What was tried and reverted</div>
+          <div class="l-item">Architecture decisions + dates</div>
+        </div>
+      </div>
+
+      <div class="layer-card" style="--lc: #f59e0b">
+        <div class="layer-card-glow"></div>
+        <div class="l-tag">Layer 3 — Semantic</div>
+        <div class="l-title">Project Memory</div>
+        <div class="l-desc">Structured knowledge about the codebase — what exists, what connects to what, how it's organized.</div>
+        <div class="l-items">
+          <div class="l-item">Stack, deps, file structure</div>
+          <div class="l-item">Module roles & API routes</div>
+          <div class="l-item">Coding style & conventions</div>
+        </div>
+      </div>
+
+      <div class="layer-card" style="--lc: #f43f5e">
+        <div class="layer-card-glow"></div>
+        <div class="l-tag">Layer 4 — Error Log</div>
+        <div class="l-title">Mistake Memory</div>
+        <div class="l-desc">The most powerful layer. Hallucinations, wrong paths, failed patterns — logged to prevent recurrence forever.</div>
+        <div class="l-items">
+          <div class="l-item">Hallucinated functions / APIs</div>
+          <div class="l-item">Wrong file paths tried</div>
+          <div class="l-item">Patterns that caused bugs</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Compatibility -->
+  <section class="compat-section reveal">
+    <div class="section-eyebrow">Compatibility</div>
+    <h2 class="section-title">Works With Any Agent</h2>
+    <p class="section-desc">Cognitree is LLM-agnostic. Plug it into the tools you already use.</p>
+
+    <div class="compat-grid">
+
+      <div class="compat-card" style="--cc: #00c8ff">
+        <span class="compat-emoji">🔵</span>
+        <div class="compat-name">Claude Code</div>
+        <div class="compat-method">CLAUDE.md + System Prompt</div>
+        <div class="compat-detail">Memory injected via CLAUDE.md project file and system prompt prepending per session.</div>
+      </div>
+
+      <div class="compat-card" style="--cc: #a855f7">
+        <span class="compat-emoji">🟣</span>
+        <div class="compat-name">Qwen Code</div>
+        <div class="compat-method">Context File Injection</div>
+        <div class="compat-detail">Structured memory blocks prepended to context window before every prompt execution.</div>
+      </div>
+
+      <div class="compat-card" style="--cc: #4285f4">
+        <span class="compat-emoji">🔷</span>
+        <div class="compat-name">Gemini CLI</div>
+        <div class="compat-method">GEMINI.md + State API</div>
+        <div class="compat-detail">GEMINI.md memory file plus persistent session state via Cognitree's local store API.</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Comparison -->
+  <section class="comparison-section reveal">
+    <div class="section-eyebrow">Impact</div>
+    <h2 class="section-title">Before vs After</h2>
+    <p class="section-desc">The difference Cognitree makes in every single session.</p>
+
+    <div class="comparison-grid">
+
+      <div class="cmp-card">
+        <div class="cmp-header">
+          <div class="cmp-dot" style="background:#ef4444; box-shadow: 0 0 8px #ef4444"></div>
+          Without Cognitree
+        </div>
+        <div class="cmp-row"><span class="cmp-icon">✗</span>Re-derives project context every session</div>
+        <div class="cmp-row"><span class="cmp-icon">✗</span>Repeats hallucinated API calls</div>
+        <div class="cmp-row"><span class="cmp-icon">✗</span>No memory of prior decisions or rationale</div>
+        <div class="cmp-row"><span class="cmp-icon">✗</span>~60% of tokens spent on context re-establishment</div>
+        <div class="cmp-row"><span class="cmp-icon">✗</span>Same wrong paths tried again and again</div>
+      </div>
+
+      <div class="cmp-card" style="border-color: rgba(16,185,129,0.15)">
+        <div class="cmp-header">
+          <div class="cmp-dot" style="background:#10b981; box-shadow: 0 0 8px #10b981"></div>
+          With Cognitree
+        </div>
+        <div class="cmp-row" style="color:#6b7a6e"><span class="cmp-icon">✓</span>Instantly knows full project state</div>
+        <div class="cmp-row" style="color:#6b7a6e"><span class="cmp-icon">✓</span>Error log blocks previously-seen hallucinations</div>
+        <div class="cmp-row" style="color:#6b7a6e"><span class="cmp-icon">✓</span>Understands WHY every decision was made</div>
+        <div class="cmp-row" style="color:#6b7a6e"><span class="cmp-icon">✓</span>~85% of tokens used for actual productive work</div>
+        <div class="cmp-row" style="color:#6b7a6e"><span class="cmp-icon">✓</span>Learns from mistakes — permanently</div>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<!-- ═══════════════ FOOTER ═══════════════ -->
+<footer>
+  <div class="footer-brand">
+    <img
+      src="https://raw.githubusercontent.com/mrxvaau/Cognitree/main/icon.png"
+      alt="Cognitree"
+      onerror="this.style.display='none'"
+    >
+    <span><span class="c">C</span>ognitree</span>
+  </div>
+  <div class="footer-meta">// AI Memory System &nbsp;·&nbsp; github.com/mrxvaau/Cognitree</div>
+</footer>
+
+<script>
+// Custom cursor
+const cursor = document.getElementById('cursor');
+const ring = document.getElementById('cursorRing');
+let mx = -100, my = -100, rx = -100, ry = -100;
+
+document.addEventListener('mousemove', e => {
+  mx = e.clientX; my = e.clientY;
+  cursor.style.left = mx - 5 + 'px';
+  cursor.style.top  = my - 5 + 'px';
+});
+
+function animateRing() {
+  rx += (mx - rx) * 0.12;
+  ry += (my - ry) * 0.12;
+  ring.style.left = rx - 18 + 'px';
+  ring.style.top  = ry - 18 + 'px';
+  requestAnimationFrame(animateRing);
+}
+animateRing();
+
+// Hover effects on interactive elements
+document.querySelectorAll('a, button, .pipeline-step, .layer-card, .compat-card').forEach(el => {
+  el.addEventListener('mouseenter', () => {
+    cursor.style.transform = 'scale(2)';
+    ring.style.width = '52px';
+    ring.style.height = '52px';
+  });
+  el.addEventListener('mouseleave', () => {
+    cursor.style.transform = 'scale(1)';
+    ring.style.width = '36px';
+    ring.style.height = '36px';
+  });
+});
+
+// Scroll reveal
+const revealEls = document.querySelectorAll('.reveal');
+const io = new IntersectionObserver(entries => {
+  entries.forEach((e, i) => {
+    if (e.isIntersecting) {
+      setTimeout(() => e.target.classList.add('visible'), i * 80);
+    }
+  });
+}, { threshold: 0.08 });
+revealEls.forEach(el => io.observe(el));
+</script>
+
+</body>
+</html>
