@@ -227,7 +227,7 @@ footer { position:relative; z-index:1; border-top:1px solid var(--border); paddi
 
   <div class="ticker">
     <div class="ticker-inner">
-      <span class="ticker-item"><span class="dot"></span>9 Memory Layers</span>
+      <span class="ticker-item"><span class="dot"></span>10 Memory Layers</span>
       <span class="ticker-item"><span class="dot"></span>Checkpoint Tree</span>
       <span class="ticker-item"><span class="dot"></span>Time Travel</span>
       <span class="ticker-item"><span class="dot"></span>Branch Recovery</span>
@@ -240,8 +240,8 @@ footer { position:relative; z-index:1; border-top:1px solid var(--border); paddi
       <span class="ticker-item"><span class="dot"></span>VS Code Extension</span>
       <span class="ticker-item"><span class="dot"></span>Local First</span>
       <span class="ticker-item"><span class="dot"></span>Model Agnostic</span>
-      <span class="ticker-item"><span class="dot"></span>Prompt_State</span>
-      <span class="ticker-item"><span class="dot"></span>9 Memory Layers</span>
+      <span class="ticker-item"><span class="dot"></span>Codebase Tracking</span>
+      <span class="ticker-item"><span class="dot"></span>10 Memory Layers</span>
       <span class="ticker-item"><span class="dot"></span>Checkpoint Tree</span>
       <span class="ticker-item"><span class="dot"></span>Time Travel</span>
       <span class="ticker-item"><span class="dot"></span>Branch Recovery</span>
@@ -254,7 +254,7 @@ footer { position:relative; z-index:1; border-top:1px solid var(--border); paddi
       <span class="ticker-item"><span class="dot"></span>VS Code Extension</span>
       <span class="ticker-item"><span class="dot"></span>Local First</span>
       <span class="ticker-item"><span class="dot"></span>Model Agnostic</span>
-      <span class="ticker-item"><span class="dot"></span>Prompt_State</span>
+      <span class="ticker-item"><span class="dot"></span>Codebase Tracking</span>
     </div>
   </div>
 </section>
@@ -263,7 +263,7 @@ footer { position:relative; z-index:1; border-top:1px solid var(--border); paddi
 <div class="stats-bar">
   <div class="stats-inner">
     <div class="stat-item"><span class="stat-value">↓70%</span><div class="stat-label">Hallucination reduction</div></div>
-    <div class="stat-item"><span class="stat-value">9</span><div class="stat-label">Structured memory layers</div></div>
+    <div class="stat-item"><span class="stat-value">10</span><div class="stat-label">Structured memory layers</div></div>
     <div class="stat-item"><span class="stat-value">∞</span><div class="stat-label">Cross-session persistence</div></div>
     <div class="stat-item"><span class="stat-value">3+</span><div class="stat-label">AI agent integrations</div></div>
   </div>
@@ -301,6 +301,7 @@ footer { position:relative; z-index:1; border-top:1px solid var(--border); paddi
   mistakes:     [...],   // what failed — permanent
   decisions:    [...],   // why X over Y
   warnings:     [...],   // be careful about
+  codebase:     {...},   // added, deleted, modified, renamed files
   prompt_state: {}       // what AI believes right now
 })</div>
         </div>
@@ -321,14 +322,22 @@ footer { position:relative; z-index:1; border-top:1px solid var(--border); paddi
         <div class="step-body">
           <div class="step-title-s">Context Injector Fires Before Next Prompt</div>
           <div class="step-detail">Only relevant layers retrieved and injected. The AI reads a structured block with everything it needs — no re-derivation, no wasted tokens.</div>
-          <div class="step-code">[COGNITREE — VoidRoom · Checkpoint 14 · Branch: trunk]
-GOAL:     Implement self-destructing messages
+          <div class="step-code">[COGNITREE — VoidRoom · cp_010b · branch-b · confidence 0.91]
+GOAL:     Implement self-destructing messages with TTL expiry
 PROGRESS: Auth done, schema defined, UI scaffolded
-NEXT:     Add TTL index to messages collection
-MISTAKES: mongoose.findByIdAndDelete() — hallucinated
-          use findOneAndDelete() instead
-WARNINGS: TTL index needs background process, not cron
-DECISION: JWT over sessions — stateless requirement
+NEXT:     Verify TTL index fires correctly with a test document
+MISTAKES: mongoose.findByIdAndDelete() → use findOneAndDelete() [critical]
+WARNINGS: TTL needs MongoDB background process running [medium]
+DECISION: TTL index over cron — atomic, native MongoDB (cp_010b)
+CODEBASE:
+  /models/message.js     [added cp_007]
+  /models/user.js        [added cp_003]
+  /api/auth.js           [added cp_004]
+  /api/messages.js       [added cp_010b]
+  /client/src/App.js     [added cp_002]
+  /client/src/Chat.jsx   [added cp_005]
+  /utils/oldHelper.js    [DELETED cp_008]
+  /package.json  /.env  /README.md
 [/COGNITREE]</div>
         </div>
       </div>
@@ -344,10 +353,10 @@ DECISION: JWT over sessions — stateless requirement
     </div>
   </section>
 
-  <!-- 9 MEMORY LAYERS -->
+  <!-- 10 MEMORY LAYERS -->
   <section class="layers-section reveal">
     <div class="section-eyebrow">Architecture</div>
-    <h2 class="section-title">Nine Memory Layers</h2>
+    <h2 class="section-title">Ten Memory Layers</h2>
     <p class="section-desc">Everything a developer holds in their head while coding — now structured, persistent, and injected with precision before every prompt.</p>
 
     <div class="layers-grid">
@@ -448,6 +457,19 @@ DECISION: JWT over sessions — stateless requirement
         <div class="l-items">
           <div class="l-item">Active file and function in scope</div>
           <div class="l-item">Current approach and live assumptions</div>
+        </div>
+      </div>
+
+      <div class="layer-card" style="--lc:#e879f9; grid-column: 1 / -1;">
+        <div class="layer-card-glow"></div>
+        <div class="l-num">Layer 10 — Codebase</div>
+        <div class="l-title">Codebase</div>
+        <div class="l-desc">The full codebase architecture. Every file, every directory, every addition, deletion, modification, and rename — tracked per checkpoint. Always fully injected. The AI never hallucinates a path that doesn't exist.</div>
+        <div class="l-items" style="display:grid; grid-template-columns: repeat(4,1fr); gap:6px;">
+          <div class="l-item">Full directory tree on every base checkpoint</div>
+          <div class="l-item">Added files + directories with checkpoint ref</div>
+          <div class="l-item">Deleted files stay in tree — marked deleted forever</div>
+          <div class="l-item">Modified + renamed files tracked explicitly</div>
         </div>
       </div>
 
