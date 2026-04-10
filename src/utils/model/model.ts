@@ -67,6 +67,9 @@ export function getUserSpecifiedModelSetting(): ModelSetting | undefined {
   const modelOverride = getMainLoopModelOverride()
   if (modelOverride !== undefined) {
     specifiedModel = modelOverride
+  } else if (isGenericLLM()) {
+    // Generic LLM mode: use LLM_MODEL env var
+    specifiedModel = process.env.LLM_MODEL || undefined
   } else {
     const settings = getSettings_DEPRECATED() || {}
     specifiedModel = process.env.ANTHROPIC_MODEL || settings.model || undefined
@@ -182,6 +185,11 @@ export function getRuntimeMainLoopModel(params: {
  * @returns The default model setting to use
  */
 export function getDefaultMainLoopModelSetting(): ModelName | ModelAlias {
+  // Generic LLM: default to LLM_MODEL env var
+  if (isGenericLLM()) {
+    return process.env.LLM_MODEL || ''
+  }
+
   // Ants default to defaultModel from flag config, or Opus 1M if not configured
   if (process.env.USER_TYPE === 'ant') {
     return (

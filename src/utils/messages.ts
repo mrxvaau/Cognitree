@@ -1,4 +1,4 @@
-﻿import { feature } from 'bun:bundle'
+import { feature } from 'bun:bundle'
 import type { LLMUsage as Usage } from 'src/types/llm.js'
 import type {
   ContentBlock,
@@ -687,6 +687,7 @@ export function extractTag(html: string, tagName: string): string | null {
 }
 
 export function isNotEmptyMessage(message: Message): boolean {
+  if (!message) return false
   if (
     message.type === 'progress' ||
     message.type === 'attachment' ||
@@ -746,7 +747,7 @@ export function normalizeMessages(messages: Message[]): NormalizedMessage[] {
   // This flag is set to true once we encounter a message with multiple content blocks,
   // and remains true for all subsequent messages in the normalization process.
   let isNewChain = false
-  return messages.flatMap(message => {
+  return messages.filter(Boolean).flatMap(message => {
     switch (message.type) {
       case 'assistant': {
         isNewChain = isNewChain || message.message.content.length > 1

@@ -352,6 +352,8 @@ export class LLMClient {
                 stop_reason: null,
                 stop_sequence: null,
                 usage,
+                container: null,
+                context_management: null,
               },
             } satisfies LLMStreamEvent
           }
