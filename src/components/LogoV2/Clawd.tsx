@@ -3,8 +3,8 @@ import * as React from 'react';
 import { Box, Text } from '../../ink.js';
 import { env } from '../../utils/env.js';
 export type ClawdPose = 'default' | 'arms-up' // both arms raised (used during jump)
-| 'look-left' // both pupils shifted left
-| 'look-right'; // both pupils shifted right
+  | 'look-left' // both pupils shifted left
+  | 'look-right'; // both pupils shifted right
 
 type Props = {
   pose?: ClawdPose;

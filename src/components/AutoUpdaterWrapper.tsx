@@ -17,6 +17,8 @@ type Props = {
   verbose: boolean;
 };
 export function AutoUpdaterWrapper(t0) {
+  // LOCAL-LLM: disable auto-updater entirely — no Anthropic update checks
+  return null;
   const $ = _c(17);
   const {
     isUpdating,
