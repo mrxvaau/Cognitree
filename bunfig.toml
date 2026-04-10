@@ -1,0 +1,5 @@
+# bunfig.toml — Bun configuration for development mode
+# The plugin intercepts `bun:bundle` imports → src/shims/bun-bundle.ts
+# The macro preload installs globalThis.MACRO before app code runs
+
+preload = ["./scripts/bun-plugin-shims.ts", "./src/shims/preload.ts"]

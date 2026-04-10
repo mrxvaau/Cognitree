@@ -1,0 +1,6 @@
+{
+  "enabledMcpjsonServers": [
+    "claude-code-explorer"
+  ],
+  "enableAllProjectMcpServers": true
+}
