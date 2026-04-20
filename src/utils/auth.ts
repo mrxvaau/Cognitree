@@ -116,8 +116,10 @@ export function isAnthropicAuthEnabled(): boolean {
   // --bare: API-key-only, never OAuth.
   if (isBareMode()) return false
 
-  // Generic/local LLM mode: never use Anthropic OAuth.
+  // Generic/local LLM mode or Qwen OAuth mode: never use Anthropic OAuth.
   if (process.env.LLM_BASE_URL) return false
+  const qwenVal = process.env.QWEN_OAUTH
+  if (qwenVal === '1' || qwenVal === 'true') return false
 
   // `claude ssh` remote: ANTHROPIC_UNIX_SOCKET tunnels API calls through a
   // local auth-injecting proxy. The launcher sets CLAUDE_CODE_OAUTH_TOKEN as a

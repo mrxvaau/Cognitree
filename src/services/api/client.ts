@@ -1,5 +1,5 @@
 /**
- * Dual-path LLM client factory.
+ * Multi-path LLM client factory.
  *
  * PATH A (Anthropic): ANTHROPIC_API_KEY set, LLM_BASE_URL not set
  *   → Returns a real @anthropic-ai/sdk Anthropic instance with all features:
@@ -9,13 +9,16 @@
  *   → Returns LLMClient wrapped with an Anthropic-compatible beta.messages shim,
  *     supporting any OpenAI-compatible endpoint (Ollama, OpenRouter, Groq, vLLM, etc.)
  *
+ * PATH C (Qwen OAuth): QWEN_OAUTH=1 set
+ *   → Like Path B, but dynamically injects fresh OAuth tokens from SharedTokenManager.
+ *
  * All callers continue to use getAnthropicClient() unchanged; the return type is
  * compatible with Anthropic's SDK surface via our local Anthropic type.
  */
 import Anthropic from '@anthropic-ai/sdk'
 import type { ClientOptions } from '@anthropic-ai/sdk'
 import { LLMClient } from './llmClient.js'
-import { isGenericLLM } from 'src/utils/model/providers.js'
+import { isGenericLLM, isQwenOAuth } from 'src/utils/model/providers.js'
 
 /** Header used to pass a client-generated request ID for correlation */
 export const CLIENT_REQUEST_ID_HEADER = 'x-client-request-id'
@@ -36,11 +39,12 @@ export function getLLMClient(): LLMClient {
 }
 
 /**
- * Dual-path client factory.
+ * Multi-path client factory.
  *
  * Returns either:
  * - Path A: A real @anthropic-ai/sdk Anthropic instance (when ANTHROPIC_API_KEY is set)
  * - Path B: An LLMClient with beta.messages shim (when LLM_BASE_URL is set)
+ * - Path C: An LLMClient with Qwen OAuth token management (when QWEN_OAUTH=1)
  */
 export async function getAnthropicClient({
   apiKey,
@@ -57,13 +61,27 @@ export async function getAnthropicClient({
 }): Promise<AnyAnthropicClient> {
 
   // ═══════════════════════════════════════════════════════
-  // PATH B: Generic OpenAI-Compatible LLM Provider
+  // PATH C: Qwen OAuth — dynamic token injection
   // ═══════════════════════════════════════════════════════
-  if (isGenericLLM()) {
+  if (isQwenOAuth()) {
+    // Get a fresh token from the token manager for each client creation
+    let qwenApiKey = process.env.LLM_API_KEY || ''
+    try {
+      const { getQwenAccessToken } = await import('src/services/qwen/index.js')
+      const freshToken = await getQwenAccessToken()
+      if (freshToken) {
+        qwenApiKey = freshToken
+        // Also update the env var for consistency
+        process.env.LLM_API_KEY = freshToken
+      }
+    } catch {
+      // Fall back to env var token if dynamic refresh fails
+    }
+
     const llmClient = new LLMClient({
-      baseURL: process.env.LLM_BASE_URL || '',
-      apiKey: process.env.LLM_API_KEY || apiKey || '',
-      model: model || process.env.LLM_MODEL || 'gpt-4',
+      baseURL: process.env.LLM_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      apiKey: qwenApiKey,
+      model: model || process.env.LLM_MODEL || 'qwen3-coder',
     })
 
     return {
@@ -106,12 +124,91 @@ export async function getAnthropicClient({
 
             return {
               async withResponse() {
-                const llmClient = new LLMClient({
+                // Dynamically get fresh token for each request (handles mid-session refresh)
+                let freshApiKey = qwenApiKey
+                try {
+                  const { getQwenAccessToken: getToken } = await import('src/services/qwen/index.js')
+                  const token = await getToken()
+                  if (token) {
+                    freshApiKey = token
+                    process.env.LLM_API_KEY = token
+                  }
+                } catch { /* use existing token */ }
+
+                const innerClient = new LLMClient({
+                  baseURL: process.env.LLM_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+                  apiKey: freshApiKey,
+                  model: model || process.env.LLM_MODEL || 'qwen3-coder',
+                })
+                return innerClient.createMessage({
+                  model: params.model || model || process.env.LLM_MODEL || 'qwen3-coder',
+                  max_tokens: params.max_tokens,
+                  system: params.system,
+                  messages,
+                  tools,
+                  stream: params.stream !== false,
+                  temperature: params.temperature,
+                }, { signal: options?.signal })
+              },
+            }
+          },
+        },
+      },
+    } as unknown as AnyAnthropicClient
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // PATH B: Generic OpenAI-Compatible LLM Provider
+  // ═══════════════════════════════════════════════════════
+  if (isGenericLLM()) {
+    const llmClient = new LLMClient({
+      baseURL: process.env.LLM_BASE_URL || '',
+      apiKey: process.env.LLM_API_KEY || apiKey || '',
+      model: model || process.env.LLM_MODEL || 'gpt-4',
+    })
+
+    return {
+      beta: {
+        messages: {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          create(params: any, options: any) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const messages = (params.messages || []).map((msg: any) => ({
+              role: msg.role,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              content: typeof msg.content === 'string'
+                ? msg.content
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                : (msg.content || []).map((block: any) => {
+                    if (block.type === 'text') return { type: 'text', text: block.text }
+                    if (block.type === 'tool_use') return {
+                      type: 'tool_use', id: block.id, name: block.name, input: block.input
+                    }
+                    if (block.type === 'tool_result') return {
+                      type: 'tool_result', tool_use_id: block.tool_use_id, content: block.content
+                    }
+                    if (block.type === 'image') return { type: 'image', source: block.source }
+                    return block
+                  }),
+            }))
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const tools = (params.tools || []).map((tool: any) => ({
+              type: 'function' as const,
+              function: {
+                name: tool.name,
+                description: tool.description,
+                parameters: tool.input_schema || { type: 'object', properties: {}, required: [] },
+              },
+            }))
+
+            return {
+              async withResponse() {
+                const innerClient = new LLMClient({
                   baseURL: process.env.LLM_BASE_URL || '',
                   apiKey: process.env.LLM_API_KEY || apiKey || '',
                   model: model || process.env.LLM_MODEL || 'gpt-4',
                 })
-                return llmClient.createMessage({
+                return innerClient.createMessage({
                   model: params.model || model || process.env.LLM_MODEL || 'gpt-4',
                   max_tokens: params.max_tokens,
                   system: params.system,

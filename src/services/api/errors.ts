@@ -1,4 +1,4 @@
-﻿import {
+import {
   LLMConnectionError,
   LLMConnectionTimeoutError,
   LLMError,
@@ -50,6 +50,13 @@ import {
 } from '../claudeAiLimits.js'
 import { shouldProcessRateLimits } from '../rateLimitMocking.js' // Used for /mock-limits command
 import { extractConnectionErrorDetails, formatAPIError } from './errorUtils.js'
+import {
+  isQwenQuotaExceededError as isQwenQuotaExceeded,
+  isQwenRateLimitError as isQwenRateLimit,
+  getQwenQuotaExceededMessage as getQwenQuotaMsg,
+  getQwenRateLimitMessage as getQwenRateLimitMsg,
+} from '../../utils/qwenQuotaDetection.js'
+import { isQwenOAuth as isQwenOAuthMode, isGenericLLM as isGenericLLMMode } from '../../utils/model/providers.js'
 
 export const API_ERROR_MESSAGE_PREFIX = 'API Error'
 
@@ -458,6 +465,37 @@ export function getAssistantMessageFromError(
   ) {
     return createAssistantAPIErrorMessage({
       content: CUSTOM_OFF_SWITCH_MESSAGE,
+      error: 'rate_limit',
+    })
+  }
+
+  // ── Qwen / Generic LLM: handle 429 errors with provider-specific messages ──
+  if (
+    error instanceof LLMError &&
+    error.status === 429 &&
+    (isQwenOAuthMode() || isGenericLLMMode())
+  ) {
+    // Check for Qwen quota exhaustion (free-tier daily limit)
+    if (isQwenQuotaExceeded(error)) {
+      return createAssistantAPIErrorMessage({
+        content: getQwenQuotaMsg(),
+        error: 'rate_limit',
+      })
+    }
+
+    // Check for Qwen rate limit (per-minute throttle — retryable)
+    if (isQwenRateLimit(error)) {
+      return createAssistantAPIErrorMessage({
+        content: getQwenRateLimitMsg(),
+        error: 'rate_limit',
+      })
+    }
+
+    // Generic LLM 429 — show the raw error, not Anthropic-specific messages
+    const rawMsg = error.message || 'Rate limit exceeded'
+    const innerMsg = rawMsg.match(/"message"\s*:\s*"([^"]*)"/)?.[1]
+    return createAssistantAPIErrorMessage({
+      content: `${API_ERROR_MESSAGE_PREFIX}: Rate limited (429) · ${innerMsg || rawMsg}`,
       error: 'rate_limit',
     })
   }

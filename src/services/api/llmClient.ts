@@ -22,6 +22,7 @@ import {
   type LLMUsage,
   type ContentBlock,
 } from '../../types/llm.js'
+import { isQwenOAuth } from '../../utils/model/providers.js'
 
 // ============================================================
 // OPENAI RESPONSE TYPES (internal to this module)
@@ -239,16 +240,79 @@ export class LLMClient {
     }
 
     if (!response.ok) {
+      // ── Parse error body (DashScope returns JSON with code/message) ──
+      let errorText = ''
+      try {
+        errorText = await response.text()
+      } catch { /* ignore read errors */ }
+
       if (response.status === 429) {
-        throw new LLMRateLimitError('Rate limit exceeded', response.status)
+        // Carry the full error body so quota detection can parse it
+        throw new LLMRateLimitError(
+          errorText || 'Rate limit exceeded',
+          response.status,
+          undefined,
+          response.headers,
+        )
       }
+
       if (response.status === 401 || response.status === 403) {
-        throw new LLMAuthenticationError('Authentication failed', response.status)
+        // ── Qwen OAuth: auto-refresh token and retry once ──
+        if (isQwenOAuth()) {
+          try {
+            const { getQwenAccessToken } = await import('../../services/qwen/index.js')
+            const freshToken = await getQwenAccessToken()
+            if (freshToken && freshToken !== this.apiKey) {
+              process.stderr.write('[LLMClient] Qwen token expired, refreshing...\n')
+              this.apiKey = freshToken
+              process.env.LLM_API_KEY = freshToken
+
+              // Retry the request with fresh token
+              const retryResponse = await fetch(url, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${freshToken}`,
+                },
+                body: JSON.stringify(body),
+                signal: options.signal,
+              })
+
+              if (retryResponse.ok) {
+                response = retryResponse
+              } else {
+                throw new LLMAuthenticationError(
+                  errorText || 'Qwen authentication failed after token refresh',
+                  retryResponse.status,
+                )
+              }
+            } else {
+              throw new LLMAuthenticationError(
+                errorText || 'Qwen authentication failed',
+                response.status,
+              )
+            }
+          } catch (refreshErr) {
+            if (refreshErr instanceof LLMAuthenticationError) throw refreshErr
+            throw new LLMAuthenticationError(
+              errorText || 'Authentication failed',
+              response.status,
+            )
+          }
+        } else {
+          throw new LLMAuthenticationError(
+            errorText || 'Authentication failed',
+            response.status,
+          )
+        }
       }
-      throw new LLMConnectionError(
-        `HTTP ${response.status}: ${response.statusText}`,
-        response.status,
-      )
+
+      if (response && !response.ok) {
+        throw new LLMConnectionError(
+          errorText || `HTTP ${response.status}: ${response.statusText}`,
+          response.status,
+        )
+      }
     }
 
     const requestId =

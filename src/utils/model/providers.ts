@@ -1,22 +1,29 @@
 /**
- * Dual-path LLM provider detection.
+ * Multi-path LLM provider detection.
  *
  * PATH A (Anthropic): ANTHROPIC_API_KEY set, LLM_BASE_URL NOT set → return 'anthropic'
  * PATH B (Generic):   LLM_BASE_URL set                             → return 'generic'
+ * PATH C (Qwen):      QWEN_OAUTH=1 set                            → return 'qwen'
  *
  * Legacy provider values ('firstParty', 'bedrock', 'vertex', 'foundry') are kept in
  * the type for compatibility with existing comparisons in the codebase —
  * getAPIProvider() will never return them, so those code paths are safely disabled.
  */
 
-export type APIProvider = 'anthropic' | 'generic' | 'firstParty' | 'bedrock' | 'vertex' | 'foundry'
+export type APIProvider = 'anthropic' | 'generic' | 'qwen' | 'firstParty' | 'bedrock' | 'vertex' | 'foundry'
 
 export function getAPIProvider(): APIProvider {
-  // Priority: Anthropic wins if its key is set AND generic base URL is NOT set
+  // Priority 1: Qwen OAuth mode (QWEN_OAUTH=1)
+  // Once initQwenOAuth() runs, LLM_BASE_URL is set, so we check QWEN_OAUTH first
+  const qwenVal = process.env.QWEN_OAUTH
+  if (qwenVal === '1' || qwenVal === 'true') {
+    return 'qwen'
+  }
+  // Priority 2: Anthropic wins if its key is set AND generic base URL is NOT set
   if (process.env.ANTHROPIC_API_KEY && !process.env.LLM_BASE_URL) {
     return 'anthropic'
   }
-  // Generic if LLM_BASE_URL is set (regardless of ANTHROPIC_API_KEY)
+  // Priority 3: Generic if LLM_BASE_URL is set (regardless of ANTHROPIC_API_KEY)
   if (process.env.LLM_BASE_URL) {
     return 'generic'
   }
@@ -29,9 +36,15 @@ export function isAnthropic(): boolean {
   return getAPIProvider() === 'anthropic'
 }
 
-/** True when running with Path B (generic OpenAI-compatible provider) */
+/** True when running with Path B (generic OpenAI-compatible provider) or Path C (Qwen OAuth) */
 export function isGenericLLM(): boolean {
-  return getAPIProvider() === 'generic'
+  const provider = getAPIProvider()
+  return provider === 'generic' || provider === 'qwen'
+}
+
+/** True when running with Path C (Qwen OAuth device flow) */
+export function isQwenOAuth(): boolean {
+  return getAPIProvider() === 'qwen'
 }
 
 /**

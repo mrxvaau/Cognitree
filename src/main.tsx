@@ -2607,6 +2607,23 @@ async function run(): Promise<CommanderCommand> {
       // but print mode is considered trusted (as documented in help text)
       applyConfigEnvironmentVariables();
 
+      // ── Qwen OAuth: init for non-interactive (--print) mode ──
+      // In interactive mode, showSetupScreens() triggers initQwenOAuth().
+      // In --print mode we never reach showSetupScreens, so initialize here.
+      const qwenPrintOAuth = process.env.QWEN_OAUTH;
+      if (qwenPrintOAuth === '1' || qwenPrintOAuth === 'true') {
+        try {
+          const { initQwenOAuth } = await import('./services/qwen/index.js');
+          const token = await initQwenOAuth();
+          if (!token) {
+            process.stderr.write('[Qwen OAuth] Failed to authenticate in print mode.\n');
+          }
+        } catch (qwenErr: unknown) {
+          const qwenMsg = qwenErr instanceof Error ? qwenErr.message : String(qwenErr);
+          process.stderr.write(`[Qwen OAuth] Auth error: ${qwenMsg}\n`);
+        }
+      }
+
       // Initialize telemetry after env vars are applied so OTEL endpoint env vars and
       // otelHeadersHelper (which requires trust to execute) are available.
       initializeTelemetryAfterTrust();

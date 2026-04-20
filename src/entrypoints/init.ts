@@ -87,8 +87,9 @@ export const init = memoize(async (): Promise<void> => {
     setupGracefulShutdown()
     profileCheckpoint('init_after_graceful_shutdown')
 
-    // ── Skip Anthropic-only services when using a local/generic LLM ──────
-    const isLocalLLM = !!process.env.LLM_BASE_URL
+    // ── Skip Anthropic-only services when using a local/generic LLM or Qwen OAuth ──
+    const qwenVal = process.env.QWEN_OAUTH
+    const isLocalLLM = !!process.env.LLM_BASE_URL || qwenVal === '1' || qwenVal === 'true'
 
     if (!isLocalLLM) {
       // Initialize 1P event logging (no security concerns, but deferred to avoid

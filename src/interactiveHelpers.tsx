@@ -107,9 +107,27 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
     return false;
   }
 
+  // ── Qwen OAuth fast-path ────────────────────────────────────────────────
+  // When QWEN_OAUTH=1 is set, perform the Qwen device auth flow
+  // (or load cached credentials). This sets LLM_BASE_URL + LLM_API_KEY
+  // so the generic LLM fast-path below applies automatically.
+  const qwenOAuthVal = process.env.QWEN_OAUTH
+  if (qwenOAuthVal === '1' || qwenOAuthVal === 'true') {
+    try {
+      const { initQwenOAuth } = await import('./services/qwen/index.js')
+      const token = await initQwenOAuth()
+      if (!token) {
+        process.stderr.write('[Qwen OAuth] Failed to authenticate. Falling back to default auth.\n')
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      process.stderr.write(`[Qwen OAuth] Auth error: ${msg}\n`)
+    }
+  }
+
   // ── Generic / Local LLM fast-path ──────────────────────────────────────
   // When LLM_BASE_URL is set the user is running against a local or
-  // third-party LLM provider (e.g. Ollama). All the interactive dialogs
+  // third-party LLM provider (e.g. Ollama, Qwen OAuth). All the interactive dialogs
   // below are Anthropic-specific (onboarding theme picker, workspace trust,
   // API-key approval, Grove policy, GrowthBook feature flags, etc.) and
   // they require keyboard interaction via React Ink which can hang in some
