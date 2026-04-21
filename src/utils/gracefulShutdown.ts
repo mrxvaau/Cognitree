@@ -299,6 +299,9 @@ export const setupGracefulShutdown = memoize(() => {
   // Log uncaught exceptions for container observability and analytics
   // Error names (e.g., "TypeError") are not sensitive - safe to log
   process.on('uncaughtException', error => {
+    process.stderr.write(
+      `[FATAL] uncaughtException: ${error.name}: ${error.message}\n${error.stack?.slice(0, 2000) || ''}\n`
+    )
     logForDiagnosticsNoPII('error', 'uncaught_exception', {
       error_name: error.name,
       error_message: error.message.slice(0, 2000),
@@ -325,6 +328,9 @@ export const setupGracefulShutdown = memoize(() => {
             error_stack: reason.stack?.slice(0, 4000),
           }
         : { error_message: String(reason).slice(0, 2000) }
+    process.stderr.write(
+      `[FATAL] unhandledRejection: ${errorInfo.error_message || errorName}\n${'error_stack' in errorInfo ? errorInfo.error_stack + '\n' : ''}`
+    )
     logForDiagnosticsNoPII('error', 'unhandled_rejection', errorInfo)
     logEvent('tengu_unhandled_rejection', {
       error_name:

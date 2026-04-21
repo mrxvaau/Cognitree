@@ -217,7 +217,7 @@ export default class App extends PureComponent<Props, State> {
         throw new Error('Raw mode is not supported on the stdin provided to Ink.\nRead about how to prevent this error on https://github.com/vadimdemedes/ink/#israwmodesupported');
       }
     }
-    stdin.setEncoding('utf8');
+    try { stdin.setEncoding('utf8'); } catch { /* ignore on Windows/Bun */ }
     if (isEnabled) {
       // Ensure raw mode is enabled only once
       if (this.rawModeEnabledCount === 0) {
@@ -227,7 +227,7 @@ export default class App extends PureComponent<Props, State> {
         // The buffered text is preserved for REPL.tsx via consumeEarlyInput().
         stopCapturingEarlyInput();
         stdin.ref();
-        stdin.setRawMode(true);
+        try { stdin.setRawMode(true); } catch { /* no-op on Windows/Bun if setRawMode unavailable */ }
         stdin.addListener('readable', this.handleReadable);
         // Enable bracketed paste mode
         this.props.stdout.write(EBP);
@@ -273,7 +273,7 @@ export default class App extends PureComponent<Props, State> {
       this.props.stdout.write(DFE);
       // Disable bracketed paste mode
       this.props.stdout.write(DBP);
-      stdin.setRawMode(false);
+      try { stdin.setRawMode(false); } catch { /* no-op on Windows/Bun */ }
       stdin.removeListener('readable', this.handleReadable);
       stdin.unref();
     }

@@ -1,5 +1,26 @@
 import { feature } from 'bun:bundle';
 
+// ── Crash prevention ─────────────────────────────────────────────────────
+// Bun exits on unhandled rejections by default. Many background operations
+// (prefetch, analytics, keychain, fast mode checks) fail when running without
+// Anthropic network access. Catch these early to prevent random crashes.
+// eslint-disable-next-line custom-rules/no-top-level-side-effects
+process.on('unhandledRejection', (reason) => {
+  try {
+    process.stderr.write(
+      `[warn] Suppressed unhandledRejection: ${reason instanceof Error ? reason.message : String(reason)}\n`
+    );
+  } catch { /* stderr closed — ignore silently */ }
+});
+// eslint-disable-next-line custom-rules/no-top-level-side-effects
+process.on('uncaughtException', (error) => {
+  try {
+    process.stderr.write(
+      `[warn] Suppressed uncaughtException: ${error?.name}: ${error?.message}\n`
+    );
+  } catch { /* stderr closed — ignore silently */ }
+});
+
 // Bugfix for corepack auto-pinning, which adds yarnpkg to peoples' package.jsons
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 process.env.COREPACK_ENABLE_AUTO_PIN = '0';
@@ -8,10 +29,11 @@ process.env.COREPACK_ENABLE_AUTO_PIN = '0';
 // Bun on Windows does not set process.stdout.isTTY even in real interactive
 // terminals. The Ink renderer and the CLI's mode detection both rely on isTTY
 // to decide whether to render interactive UI or enter headless print mode.
-// When LLM_BASE_URL is set and -p/--print was NOT passed, force isTTY = true
-// so the user gets the interactive REPL they expect.
+// Ink also calls stdin.setRawMode(true) which may not exist on Bun/Windows.
+// When running on Windows and isTTY is undefined (not explicitly false),
+// force isTTY = true and polyfill setRawMode so Ink renders correctly.
 // eslint-disable-next-line custom-rules/no-top-level-side-effects, custom-rules/no-process-env-top-level
-if (process.env.LLM_BASE_URL && process.stdout.isTTY === undefined) {
+if (process.platform === 'win32' && process.stdout.isTTY === undefined) {
   const hasPrintFlag = process.argv.includes('-p') || process.argv.includes('--print');
   if (!hasPrintFlag) {
     // @ts-expect-error — isTTY is read-only in typings but writable at runtime
@@ -27,6 +49,31 @@ if (process.env.LLM_BASE_URL && process.stdout.isTTY === undefined) {
       // @ts-expect-error
       process.stdout.rows = 30;
     }
+    // Ink calls stdin.setRawMode(true) in App.tsx — polyfill if missing.
+    // CRITICAL: The polyfill must also call stdin.ref() to keep the event
+    // loop alive. Without real raw mode, Bun considers stdin "idle" and
+    // drains the event loop after all pending I/O (e.g. Ollama response)
+    // completes — causing a silent exit with no process.exit() or signal.
+    if (typeof process.stdin.setRawMode !== 'function') {
+      // @ts-expect-error — adding method that Bun may not provide on Windows
+      process.stdin.setRawMode = (_mode: boolean) => {
+        try { process.stdin.ref(); } catch { /* ignore */ }
+        return process.stdin;
+      };
+    }
+    // FAILSAFE: Keep the event loop alive with a background interval.
+    // Even with stdin.ref(), Bun on Windows may not treat the polyfilled
+    // stdin as an active handle. This timer guarantees the event loop
+    // never drains while the CLI is supposed to be interactive.
+    // eslint-disable-next-line custom-rules/no-top-level-side-effects
+    const _keepAlive = setInterval(() => {}, 30_000);
+    // Don't let this timer prevent graceful exit when process.exit() is called
+    if (_keepAlive.unref) _keepAlive.unref();
+    // Re-ref it — we WANT it to keep the process alive, but only as a
+    // backstop. The ref() call ensures the timer counts as an active handle.
+    // We use ref() instead of unref() because the WHOLE POINT is to prevent
+    // event loop drain. When process.exit() is called, it terminates anyway.
+    if (_keepAlive.ref) _keepAlive.ref();
   }
 }
 
@@ -61,7 +108,13 @@ async function main(): Promise<void> {
 
   // Watchdog: if boot hangs for >120s, log diagnostic info and exit.
   // unref() ensures the timer doesn't keep the process alive on normal exit.
-  const watchdog = setTimeout(() => {
+  // COMPLETELY DISABLED on Windows with local LLM: the boot process has
+  // multiple network calls that timeout when Anthropic endpoints are
+  // unreachable, and the keepalive interval prevents the unref'd timer
+  // from being ignored. The watchdog is designed for CI/containers.
+  const isLocalLLM = !!(process.env.LLM_BASE_URL || process.env.OLLAMA_HOST);
+  const skipWatchdog = process.platform === 'win32' && isLocalLLM;
+  const watchdog = skipWatchdog ? null : setTimeout(() => {
     process.stderr.write(
       '[WATCHDOG] Boot timed out after 120s — possible hang detected.\n' +
       'Set CLAUDE_CODE_PROFILE_STARTUP=1 for detailed timing.\n'
@@ -69,7 +122,7 @@ async function main(): Promise<void> {
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(1);
   }, 120_000);
-  watchdog.unref();
+  if (watchdog) watchdog.unref();
 
   // Fast-path for --version/-v: zero module loading needed
   if (args.length === 1 && (args[0] === '--version' || args[0] === '-v' || args[0] === '-V')) {

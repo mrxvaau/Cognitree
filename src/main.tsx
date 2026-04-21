@@ -263,9 +263,9 @@ function isBeingDebugged() {
 }
 
 // Exit if we detect node debugging or inspection
-// Skip this guard when running with a local LLM (LLM_BASE_URL) — Bun on Windows
-// can set debug-like flags that trigger false positives, causing silent exits.
-if ("external" !== 'ant' && !process.env.LLM_BASE_URL && isBeingDebugged()) {
+// Skip this guard on Windows — Bun on Windows can set debug-like flags
+// that trigger false positives, causing silent exits.
+if ("external" !== 'ant' && process.platform !== 'win32' && isBeingDebugged()) {
   // Use process.exit directly here since we're in the top-level code before imports
   // and gracefulShutdown is not yet available
   // eslint-disable-next-line custom-rules/no-top-level-side-effects
@@ -803,10 +803,10 @@ export async function main() {
   const hasInitOnlyFlag = cliArgs.includes('--init-only');
   const hasSdkUrl = cliArgs.some(arg => arg.startsWith('--sdk-url'));
   // Bun on Windows reports process.stdout.isTTY as undefined even in real
-  // terminals. When LLM_BASE_URL is set (local LLM mode), treat undefined as
-  // TTY so the user gets interactive mode. Only force non-interactive when
-  // isTTY is explicitly false (e.g. piped output).
-  const stdoutIsTTY = process.stdout.isTTY ?? (!!process.env.LLM_BASE_URL || false);
+  // terminals. The TTY polyfill in cli.tsx sets isTTY = true on win32+Bun,
+  // but if we got here with isTTY still undefined, treat it as interactive
+  // on Windows (only force non-interactive when isTTY is explicitly false).
+  const stdoutIsTTY = process.stdout.isTTY ?? (process.platform === 'win32');
   const isNonInteractive = hasPrintFlag || hasInitOnlyFlag || hasSdkUrl || !stdoutIsTTY;
 
   // Stop capturing early input for non-interactive modes

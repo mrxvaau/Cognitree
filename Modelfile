@@ -1,0 +1,8 @@
+FROM qwen2.5-coder:7b
+
+# Context window: 8192 tokens — fits in 6GB VRAM with qwen2.5-coder:7b
+# Large enough to hold Claude Code's system prompt + tools + conversation
+PARAMETER num_ctx 8192
+
+# Reduce parallel processing to save VRAM
+PARAMETER num_batch 256

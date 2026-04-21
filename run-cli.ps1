@@ -1,13 +1,14 @@
+# Default: Local Ollama (override at runtime with /byok)
 $env:LLM_BASE_URL = "http://localhost:11434/v1"
-$env:LLM_MODEL = "qwen3:1.7b"
+$env:LLM_MODEL = "qwen-coder-local"
 $env:LLM_API_KEY = "ollama"
 
 Write-Host "=== ENV SET ===" -ForegroundColor Green
 Write-Host "LLM_BASE_URL: $env:LLM_BASE_URL"
 Write-Host "LLM_MODEL: $env:LLM_MODEL"
-Write-Host "stdout.isTTY check..."
+Write-Host "Tip: Use /byok inside CLI to switch to OpenRouter" -ForegroundColor Cyan
+Write-Host ""
 
-# Quick sanity check
 Write-Host "=== STARTING CLI ===" -ForegroundColor Cyan
 bun src/entrypoints/cli.tsx 2> "$PSScriptRoot\cli_stderr.log"
 $exitCode = $LASTEXITCODE

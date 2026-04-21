@@ -113,14 +113,28 @@ export class LLMClient {
         messages.push({ role: msg.role, content: msg.content })
       } else {
         // Convert content blocks to OpenAI format
+        // For assistant messages, separate text content from tool_use blocks
+        // because OpenAI format requires tool_calls as a sibling field, not inline
         const parts: unknown[] = []
+        const toolCalls: Array<{
+          id: string
+          type: 'function'
+          function: { name: string; arguments: string }
+        }> = []
+
         for (const block of msg.content) {
           if (block.type === 'text') {
             parts.push({ type: 'text', text: block.text })
           } else if (block.type === 'tool_use') {
-            // tool_use blocks from assistant → tool_calls format is handled below
-            // For now push as text representation
-            parts.push({ type: 'text', text: JSON.stringify(block.input) })
+            // Assistant tool_use → OpenAI tool_calls format
+            toolCalls.push({
+              id: block.id,
+              type: 'function',
+              function: {
+                name: block.name,
+                arguments: JSON.stringify(block.input),
+              },
+            })
           } else if (block.type === 'tool_result') {
             // Tool result goes as a separate 'tool' role message
             const contentStr =
@@ -151,7 +165,26 @@ export class LLMClient {
             }
           }
         }
-        if (parts.length > 0) {
+
+        // Build the message object
+        if (msg.role === 'assistant' && toolCalls.length > 0) {
+          // Assistant message with tool calls: use OpenAI's tool_calls field
+          const assistantMsg: Record<string, unknown> = {
+            role: 'assistant',
+            tool_calls: toolCalls,
+          }
+          // Include text content if present alongside tool calls
+          if (parts.length > 0) {
+            const textContent = parts
+              .filter((p: unknown) => (p as { type: string }).type === 'text')
+              .map((p: unknown) => (p as { text: string }).text)
+              .join('')
+            if (textContent) {
+              assistantMsg.content = textContent
+            }
+          }
+          messages.push(assistantMsg as { role: string; content: string | unknown[] })
+        } else if (parts.length > 0) {
           messages.push({ role: msg.role, content: parts })
         }
       }
@@ -355,6 +388,13 @@ export class LLMClient {
     let nextBlockIndex = 0
     let hasEmittedMessageStart = false
 
+    // Accumulate all text content so we can check for JSON tool calls
+    // when the stream finishes. Small local models often output tool calls
+    // as text ({"name": "X", "arguments": {...}}) instead of using the
+    // OpenAI function calling format.
+    let textAccumulator = ''
+    let textBlockStarted = false
+
     try {
       while (true) {
         if (signal.aborted) {
@@ -427,9 +467,11 @@ export class LLMClient {
 
             // ── Text content delta ────────────────────────────────────
             if (delta.content != null && delta.content !== '') {
+              textAccumulator += delta.content
+
               // Emit content_block_start for text if not yet opened
-              // We use blockIndex 0 for text
-              if (nextBlockIndex === 0) {
+              if (!textBlockStarted) {
+                textBlockStarted = true
                 const textBlock: ContentBlock = { type: 'text', text: '' }
                 yield {
                   type: 'content_block_start',
@@ -439,6 +481,7 @@ export class LLMClient {
                 nextBlockIndex = 1
               }
 
+              // Yield text deltas in real-time for streaming display
               yield {
                 type: 'content_block_delta',
                 index: 0,
@@ -502,51 +545,168 @@ export class LLMClient {
 
             // ── Finish reason → close open blocks ─────────────────────
             if (choice.finish_reason) {
-              // Close text block if opened
-              if (nextBlockIndex > 0 && toolCallMap.size === 0) {
+              // Check if the accumulated text is actually a JSON tool call
+              // Small local models (e.g. qwen2.5-coder, deepseek-r1) often
+              // output tool calls as text instead of using function calling
+              let parsedToolCall = _tryParseTextAsToolCall(textAccumulator.trim())
+
+              // Normalize tool names and parameters for local model compatibility
+              if (parsedToolCall) {
+                parsedToolCall = _normalizeToolCall(parsedToolCall)
+              }
+
+              if (parsedToolCall && toolCallMap.size === 0) {
+                // The model output a tool call as text — convert it!
+                // Don't close the text block as normal; emit tool_use instead
+                if (textBlockStarted) {
+                  yield {
+                    type: 'content_block_stop',
+                    index: 0,
+                  } satisfies LLMStreamEvent
+                }
+
+                const toolBlockIndex = nextBlockIndex++
+                const toolId = `tool-text-${toolBlockIndex}`
+
+                // Emit tool_use start
+                yield {
+                  type: 'content_block_start',
+                  index: toolBlockIndex,
+                  content_block: {
+                    type: 'tool_use',
+                    id: toolId,
+                    name: parsedToolCall.name,
+                    input: {},
+                  },
+                } satisfies LLMStreamEvent
+
+                // Emit the arguments
+                yield {
+                  type: 'content_block_delta',
+                  index: toolBlockIndex,
+                  delta: {
+                    type: 'input_json_delta',
+                    partial_json: JSON.stringify(parsedToolCall.arguments),
+                  },
+                } satisfies LLMStreamEvent
+
+                // Close tool block
                 yield {
                   type: 'content_block_stop',
-                  index: 0,
+                  index: toolBlockIndex,
                 } satisfies LLMStreamEvent
-              }
 
-              // Close all tool_use blocks
-              for (const entry of toolCallMap.values()) {
+                // Emit message_delta with tool_use stop reason
+                const finalUsage: LLMUsage = {
+                  input_tokens: inputTokens,
+                  output_tokens: outputTokens,
+                }
+
                 yield {
-                  type: 'content_block_stop',
-                  index: entry.blockIndex,
+                  type: 'message_delta',
+                  delta: {
+                    stop_reason: 'tool_use',
+                    stop_sequence: null,
+                  },
+                  usage: finalUsage,
+                } satisfies LLMStreamEvent
+
+                yield {
+                  type: 'message_stop',
+                } satisfies LLMStreamEvent
+              } else {
+                // Normal flow — close text block if opened
+                if (textBlockStarted && toolCallMap.size === 0) {
+                  yield {
+                    type: 'content_block_stop',
+                    index: 0,
+                  } satisfies LLMStreamEvent
+                }
+
+                // Close all tool_use blocks
+                for (const entry of toolCallMap.values()) {
+                  yield {
+                    type: 'content_block_stop',
+                    index: entry.blockIndex,
+                  } satisfies LLMStreamEvent
+                }
+
+                // Map finish_reason to Anthropic stop_reason
+                const stopReason =
+                  choice.finish_reason === 'tool_calls'
+                    ? 'tool_use'
+                    : choice.finish_reason === 'length'
+                      ? 'max_tokens'
+                      : 'end_turn'
+
+                const finalUsage: LLMUsage = {
+                  input_tokens: inputTokens,
+                  output_tokens: outputTokens,
+                }
+
+                yield {
+                  type: 'message_delta',
+                  delta: {
+                    stop_reason: stopReason,
+                    stop_sequence: null,
+                  },
+                  usage: finalUsage,
+                } satisfies LLMStreamEvent
+
+                yield {
+                  type: 'message_stop',
                 } satisfies LLMStreamEvent
               }
-
-              // Map finish_reason to Anthropic stop_reason
-              const stopReason =
-                choice.finish_reason === 'tool_calls'
-                  ? 'tool_use'
-                  : choice.finish_reason === 'length'
-                    ? 'max_tokens'
-                    : 'end_turn'
-
-              const finalUsage: LLMUsage = {
-                input_tokens: inputTokens,
-                output_tokens: outputTokens,
-              }
-
-              yield {
-                type: 'message_delta',
-                delta: {
-                  stop_reason: stopReason,
-                  stop_sequence: null,
-                },
-                usage: finalUsage,
-              } satisfies LLMStreamEvent
-
-              yield {
-                type: 'message_stop',
-              } satisfies LLMStreamEvent
             }
           }
         }
       }
+    } catch (streamErr) {
+      // Handle connection drops gracefully (Ollama OOM, timeout, etc.)
+      // Instead of letting the error propagate and crash the CLI,
+      // log it and emit a clean error message
+      if (streamErr instanceof LLMUserAbortError) {
+        throw streamErr  // User-initiated abort should propagate
+      }
+      process.stderr.write(
+        `[LLMClient] Stream error: ${streamErr instanceof Error ? streamErr.message : String(streamErr)}\n`
+      )
+      // If we haven't emitted message_start, do it now so the CLI
+      // has a valid message to display
+      if (!hasEmittedMessageStart) {
+        const usage: LLMUsage = { input_tokens: 0, output_tokens: 0 }
+        yield {
+          type: 'message_start',
+          message: {
+            id: messageId, type: 'message' as const,
+            role: 'assistant' as const, content: [] as ContentBlock[],
+            model: modelName, stop_reason: null, stop_sequence: null,
+            usage, container: null, context_management: null,
+          },
+        } satisfies LLMStreamEvent
+      }
+      // Emit error text so user sees something
+      const errBlockIdx = nextBlockIndex++
+      yield {
+        type: 'content_block_start',
+        index: errBlockIdx,
+        content_block: { type: 'text', text: '' },
+      } satisfies LLMStreamEvent
+      yield {
+        type: 'content_block_delta',
+        index: errBlockIdx,
+        delta: {
+          type: 'text_delta',
+          text: `\n⚠️ Connection to Ollama lost. This usually means the model ran out of memory (VRAM/RAM). Try:\n• Start a new conversation (shorter context)\n• Set OLLAMA_NUM_PARALLEL=1 to reduce memory\n• Use a smaller model\n`,
+        },
+      } satisfies LLMStreamEvent
+      yield { type: 'content_block_stop', index: errBlockIdx } satisfies LLMStreamEvent
+      yield {
+        type: 'message_delta',
+        delta: { stop_reason: 'end_turn', stop_sequence: null },
+        usage: { input_tokens: 0, output_tokens: 0 },
+      } satisfies LLMStreamEvent
+      yield { type: 'message_stop' } satisfies LLMStreamEvent
     } finally {
       try {
         reader.cancel()
@@ -608,4 +768,268 @@ export class LLMClient {
   get messages() {
     return this.beta.messages
   }
+}
+
+// ============================================================
+// TEXT-AS-TOOL-CALL DETECTION
+// ============================================================
+
+/**
+ * Try to parse text content as a JSON tool call.
+ * Small local models (qwen2.5-coder, deepseek-r1, etc.) often output
+ * tool calls as text like: {"name": "Bash", "arguments": {"command": "ls"}}
+ * instead of using the OpenAI function calling format.
+ *
+ * Returns the parsed tool call if the text matches, or null otherwise.
+ */
+function _tryParseTextAsToolCall(
+  text: string,
+): { name: string; arguments: Record<string, unknown>; prefix: string } | null {
+  if (!text) return null
+
+  const trimmed = text.trim()
+
+  // Strategy 1: The entire text is a JSON object
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    const result = _parseToolCallJson(trimmed)
+    if (result) return { ...result, prefix: '' }
+  }
+
+  // Strategy 2: JSON inside markdown code fences
+  const fenceMatch = trimmed.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
+  if (fenceMatch) {
+    const result = _parseToolCallJson(fenceMatch[1]!.trim())
+    if (result) {
+      const prefix = trimmed.slice(0, trimmed.indexOf('```')).trim()
+      return { ...result, prefix }
+    }
+  }
+
+  // Strategy 3: Find a JSON object embedded in text
+  // Look for all { ... } blocks and try to parse the ones containing "name"
+  const jsonMatches: Array<{ json: string; startIdx: number }> = []
+  let depth = 0
+  let start = -1
+  for (let i = 0; i < trimmed.length; i++) {
+    if (trimmed[i] === '{') {
+      if (depth === 0) start = i
+      depth++
+    } else if (trimmed[i] === '}') {
+      depth--
+      if (depth === 0 && start >= 0) {
+        jsonMatches.push({
+          json: trimmed.slice(start, i + 1),
+          startIdx: start,
+        })
+        start = -1
+      }
+    }
+  }
+
+  // Try each JSON match, prefer the largest (most likely to be the tool call)
+  for (const match of jsonMatches.sort((a, b) => b.json.length - a.json.length)) {
+    const result = _parseToolCallJson(match.json)
+    if (result) {
+      const prefix = trimmed.slice(0, match.startIdx).trim()
+      return { ...result, prefix }
+    }
+  }
+
+  return null
+}
+
+/**
+ * Parse a JSON string as a tool call object.
+ * Returns { name, arguments } if valid, null otherwise.
+ */
+function _parseToolCallJson(
+  jsonText: string,
+): { name: string; arguments: Record<string, unknown> } | null {
+  try {
+    const parsed = JSON.parse(jsonText)
+
+    // Must have 'name' field (string) — the tool name
+    if (typeof parsed.name !== 'string' || !parsed.name) return null
+
+    // Must have 'arguments' or 'parameters' or 'input' field (object)
+    const args = parsed.arguments || parsed.parameters || parsed.input
+    if (!args || typeof args !== 'object') {
+      // Some models output: {"name": "X", "key1": "val1", ...}
+      // where the args are top-level. Extract everything except 'name'.
+      const { name, ...rest } = parsed
+      if (Object.keys(rest).length > 0) {
+        return { name: parsed.name, arguments: rest }
+      }
+      // Tool with no arguments
+      return { name: parsed.name, arguments: {} }
+    }
+
+    return { name: parsed.name, arguments: args }
+  } catch {
+    return null
+  }
+}
+
+// ============================================================
+// TOOL NAME & PARAMETER NORMALIZATION
+// ============================================================
+
+/**
+ * Normalize tool names and parameter keys for local model compatibility.
+ * Small models (7B) often use plausible but incorrect tool names or
+ * parameter names. This maps them to the actual Claude Code schema.
+ */
+function _normalizeToolCall(
+  toolCall: { name: string; arguments: Record<string, unknown>; prefix: string },
+): { name: string; arguments: Record<string, unknown>; prefix: string } {
+  let { name, arguments: args } = toolCall
+
+  // ── Tool name normalization ──────────────────────────────
+  // Map common model mistakes to actual tool names
+  const nameMap: Record<string, string> = {
+    // Bash variants
+    'bash': 'Bash',
+    'shell': 'Bash',
+    'execute': 'Bash',
+    'run': 'Bash',
+    'terminal': 'Bash',
+    'cmd': 'Bash',
+    'command': 'Bash',
+    'powershell': 'Bash',
+    // File read variants
+    'read': 'Read',
+    'fileread': 'Read',
+    'readfile': 'Read',
+    'cat': 'Read',
+    'view': 'Read',
+    // File write variants
+    'write': 'Write',
+    'filewrite': 'Write',
+    'writefile': 'Write',
+    'createfile': 'Write',
+    'create': 'Write',
+    'save': 'Write',
+    // File edit variants
+    'edit': 'Edit',
+    'fileedit': 'Edit',
+    'editfile': 'Edit',
+    'modify': 'Edit',
+    'patch': 'Edit',
+    // Glob/search variants
+    'glob': 'Glob',
+    'globtool': 'Glob',
+    'find': 'Glob',
+    'search': 'Glob',
+    'ls': 'Glob',
+    'list': 'Glob',
+    'listfiles': 'Glob',
+    // Grep variants
+    'grep': 'Grep',
+    'greptool': 'Grep',
+    'rg': 'Grep',
+    'ripgrep': 'Grep',
+    // Web fetch variants
+    'webfetch': 'WebFetch',
+    'fetch': 'WebFetch',
+    'curl': 'WebFetch',
+    'http': 'WebFetch',
+  }
+
+  const normalizedName = nameMap[name.toLowerCase()] || name
+
+  // ── Parameter normalization per tool ────────────────────
+  const normalizedArgs = { ...args }
+
+  switch (normalizedName) {
+    case 'Bash': {
+      // Model says "script", "cmd", "bash", "shell_command" → should be "command"
+      if (!normalizedArgs.command) {
+        const cmd = normalizedArgs.script || normalizedArgs.cmd ||
+          normalizedArgs.bash || normalizedArgs.shell_command ||
+          normalizedArgs.shell || normalizedArgs.exec
+        if (cmd) {
+          normalizedArgs.command = cmd
+          delete normalizedArgs.script
+          delete normalizedArgs.cmd
+          delete normalizedArgs.bash
+          delete normalizedArgs.shell_command
+          delete normalizedArgs.shell
+          delete normalizedArgs.exec
+        }
+      }
+      break
+    }
+    case 'Read': {
+      // Model says "path", "filename", "filepath" → should be "file_path"
+      if (!normalizedArgs.file_path) {
+        const fp = normalizedArgs.path || normalizedArgs.filename ||
+          normalizedArgs.filepath || normalizedArgs.file
+        if (fp) {
+          normalizedArgs.file_path = fp
+          delete normalizedArgs.path
+          delete normalizedArgs.filename
+          delete normalizedArgs.filepath
+          delete normalizedArgs.file
+        }
+      }
+      break
+    }
+    case 'Write': {
+      // Normalize path
+      if (!normalizedArgs.file_path) {
+        const fp = normalizedArgs.path || normalizedArgs.filename ||
+          normalizedArgs.filepath || normalizedArgs.file
+        if (fp) {
+          normalizedArgs.file_path = fp
+          delete normalizedArgs.path
+          delete normalizedArgs.filename
+          delete normalizedArgs.filepath
+          delete normalizedArgs.file
+        }
+      }
+      // Normalize content
+      if (!normalizedArgs.content) {
+        const c = normalizedArgs.text || normalizedArgs.data || normalizedArgs.body
+        if (c) {
+          normalizedArgs.content = c
+          delete normalizedArgs.text
+          delete normalizedArgs.data
+          delete normalizedArgs.body
+        }
+      }
+      break
+    }
+    case 'Glob': {
+      // Model says "pattern", "glob", "query" → should be "pattern"
+      if (!normalizedArgs.pattern) {
+        const p = normalizedArgs.glob || normalizedArgs.query ||
+          normalizedArgs.search || normalizedArgs.glob_pattern
+        if (p) {
+          normalizedArgs.pattern = p
+          delete normalizedArgs.glob
+          delete normalizedArgs.query
+          delete normalizedArgs.search
+          delete normalizedArgs.glob_pattern
+        }
+      }
+      break
+    }
+    case 'Grep': {
+      // Model says "query", "search", "text" → should be "pattern"
+      if (!normalizedArgs.pattern) {
+        const p = normalizedArgs.query || normalizedArgs.search ||
+          normalizedArgs.text || normalizedArgs.regex
+        if (p) {
+          normalizedArgs.pattern = p
+          delete normalizedArgs.query
+          delete normalizedArgs.search
+          delete normalizedArgs.text
+          delete normalizedArgs.regex
+        }
+      }
+      break
+    }
+  }
+
+  return { name: normalizedName, arguments: normalizedArgs, prefix: toolCall.prefix }
 }

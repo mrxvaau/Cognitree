@@ -92,6 +92,6 @@ function _setQwenEnvVars(
 
   // Set default model if not already set
   if (!process.env.LLM_MODEL) {
-    process.env.LLM_MODEL = 'qwen3-coder'
+    process.env.LLM_MODEL = 'qwen-coder-local'
   }
 }
