@@ -247,8 +247,7 @@ export async function handlePromptSubmit(
 
     if (
       immediateCommand &&
-      immediateCommand.type === 'local-jsx' &&
-      (queryGuard.isActive || isExternalLoading)
+      immediateCommand.type === 'local-jsx'
     ) {
       logEvent('tengu_immediate_command_executed', {
         commandName:
