@@ -106,6 +106,32 @@ if (feature('ABLATION_BASELINE') && process.env.CLAUDE_CODE_ABLATION_BASELINE) {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
+  // Load saved BYOK config (~/.claude/byok.env) BEFORE watchdog setup.
+  // This ensures the watchdog check below correctly accounts for saved local
+  // LLM configs — without this, Windows users with a saved BYOK config pointing
+  // to Ollama/local would still get the watchdog fired because LLM_BASE_URL
+  // wasn't set until later in the flow.
+  try {
+    const { existsSync: exists, readFileSync: readFile } = await import('fs');
+    const { homedir: home } = await import('os');
+    const { join: pathJoin } = await import('path');
+    const byokPath = pathJoin(home(), '.claude', 'byok.env');
+    if (exists(byokPath) && !process.env.LLM_BASE_URL) {
+      const content = readFile(byokPath, 'utf8');
+      for (const line of content.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const eq = trimmed.indexOf('=');
+        if (eq === -1) continue;
+        const key = trimmed.slice(0, eq).trim();
+        const value = trimmed.slice(eq + 1).trim();
+        if (value && !process.env[key]) {
+          process.env[key] = value;
+        }
+      }
+    }
+  } catch { /* Non-fatal — continue without BYOK config */ }
+
   // Watchdog: if boot hangs for >120s, log diagnostic info and exit.
   // unref() ensures the timer doesn't keep the process alive on normal exit.
   // COMPLETELY DISABLED on Windows with local LLM: the boot process has
