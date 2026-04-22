@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Box, Text, useInput } from 'ink'
+import { Box, Text, useInput } from '../../ink.js'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
