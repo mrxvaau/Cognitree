@@ -206,12 +206,17 @@ export class LLMClient {
     // Strip tools if the model previously rejected them
     const effectiveTools = _modelToolsUnsupported ? undefined : tools
 
+    // Detect providers that don't support all OpenAI request fields.
+    // Google's generativelanguage endpoint rejects 'stream_options' with HTTP 400.
+    const isGoogleEndpoint = this.baseURL.includes('googleapis.com')
+
     const body: Record<string, unknown> = {
       model: params.model || this.model,
       messages,
       max_tokens: params.max_tokens,
       stream: true,
-      stream_options: { include_usage: true },
+      // stream_options is OpenAI-specific — Google (and some others) reject it
+      ...(!isGoogleEndpoint ? { stream_options: { include_usage: true } } : {}),
       ...(effectiveTools ? { tools: effectiveTools } : {}),
       ...(params.temperature !== undefined ? { temperature: params.temperature } : {}),
       ...(params.tool_choice && !_modelToolsUnsupported ? { tool_choice: params.tool_choice.type } : {}),
