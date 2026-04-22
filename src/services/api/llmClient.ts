@@ -217,9 +217,20 @@ export class LLMClient {
       ...(params.tool_choice && !_modelToolsUnsupported ? { tool_choice: params.tool_choice.type } : {}),
     }
 
-    // Normalize: if baseURL already ends with /v1, don't double it
-    const base = this.baseURL.replace(/\/v1\/?$/, '')
-    const url = `${base}/v1/chat/completions`
+    // Build the completion URL.
+    // Handles two cases:
+    //   A) Standard OpenAI-style: baseURL = https://openrouter.ai/api/v1
+    //      → strip trailing /v1, re-append → /v1/chat/completions
+    //   B) Full-path providers (Google, etc.): baseURL = https://.../v1beta/openai
+    //      → already contains the full mount point, just append /chat/completions
+    const base = this.baseURL.replace(/\/+$/, '') // strip trailing slashes
+    const url = base.endsWith('/v1')
+      ? `${base}/chat/completions`                          // case A: conventional
+      : base.endsWith('/chat/completions')
+        ? base                                              // already full URL
+        : base.includes('/v1/')
+          ? `${base}/chat/completions`                      // case B: full-path (Google)
+          : `${base}/v1/chat/completions`                   // case A fallback
 
     let response: Response
     try {
