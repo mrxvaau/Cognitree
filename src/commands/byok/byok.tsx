@@ -1,4 +1,3 @@
-import chalk from 'chalk'
 import * as React from 'react'
 import { Box, Text, useInput } from 'ink'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
@@ -7,24 +6,22 @@ import { join } from 'path'
 import type { LocalJSXCommandCall, LocalJSXCommandOnDone } from '../../types/command.js'
 import TextInput from '../../components/TextInput.js'
 import { useSetAppState } from '../../state/AppState.js'
+import { setMainLoopModelOverride } from '../../bootstrap/state.js'
 
-// ── Config persistence ─────────────────────────────────────────────────
+// ── Persistence ────────────────────────────────────────────────────────
 const CLAUDE_DIR = join(homedir(), '.claude')
 const BYOK_ENV_PATH = join(CLAUDE_DIR, 'byok.env')
 
-function loadSavedConfig(): { baseUrl?: string; apiKey?: string; model?: string } {
+function loadSaved(): { baseUrl?: string; apiKey?: string; model?: string } {
   try {
     if (!existsSync(BYOK_ENV_PATH)) return {}
-    const content = readFileSync(BYOK_ENV_PATH, 'utf8')
     const result: Record<string, string> = {}
-    for (const line of content.split('\n')) {
-      const trimmed = line.trim()
-      if (!trimmed || trimmed.startsWith('#')) continue
-      const eq = trimmed.indexOf('=')
+    for (const line of readFileSync(BYOK_ENV_PATH, 'utf8').split('\n')) {
+      const t = line.trim()
+      if (!t || t.startsWith('#')) continue
+      const eq = t.indexOf('=')
       if (eq === -1) continue
-      const key = trimmed.slice(0, eq).trim()
-      const value = trimmed.slice(eq + 1).trim()
-      result[key] = value
+      result[t.slice(0, eq).trim()] = t.slice(eq + 1).trim()
     }
     return {
       baseUrl: result['LLM_BASE_URL'],
@@ -36,587 +33,334 @@ function loadSavedConfig(): { baseUrl?: string; apiKey?: string; model?: string 
   }
 }
 
-function saveConfig(baseUrl: string, apiKey: string, model: string): void {
+function persist(baseUrl: string, apiKey: string, model: string) {
   try {
     if (!existsSync(CLAUDE_DIR)) mkdirSync(CLAUDE_DIR, { recursive: true })
-    const content = [
-      '# BYOK configuration — managed by /byok command',
-      `# Last updated: ${new Date().toISOString()}`,
-      `LLM_BASE_URL=${baseUrl}`,
-      `LLM_API_KEY=${apiKey}`,
-      `LLM_MODEL=${model}`,
-    ].join('\n') + '\n'
-    writeFileSync(BYOK_ENV_PATH, content, { encoding: 'utf8', mode: 0o600 })
-  } catch {
-    // Non-fatal — config still applied in-memory
+    writeFileSync(
+      BYOK_ENV_PATH,
+      [
+        '# BYOK — managed by /byok',
+        `# Updated: ${new Date().toISOString()}`,
+        `LLM_BASE_URL=${baseUrl}`,
+        `LLM_API_KEY=${apiKey}`,
+        `LLM_MODEL=${model}`,
+      ].join('\n') + '\n',
+      { encoding: 'utf8', mode: 0o600 },
+    )
+  } catch { /* non-fatal */ }
+}
+
+// ── Provider config ────────────────────────────────────────────────────
+const OPENROUTER_BASE = 'https://openrouter.ai/api/v1'
+
+type Step = 'pick' | 'apikey' | 'model' | 'verify' | 'done_err'
+
+// ── Live verification ──────────────────────────────────────────────────
+async function verifyOpenRouter(key: string, model: string): Promise<string | null> {
+  // Returns null on success, error string on failure
+  try {
+    const res = await fetch(`${OPENROUTER_BASE}/models`, {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) {
+      if (res.status === 401) return 'Invalid API key — check https://openrouter.ai/keys'
+      return `OpenRouter returned HTTP ${res.status}`
+    }
+    // Confirm the model exists in the list
+    const json = await res.json() as { data?: Array<{ id: string }> }
+    const ids = json.data?.map(m => m.id) ?? []
+    if (ids.length > 0 && !ids.includes(model)) {
+      // Model not in list — warn but don't block (custom/private models won't appear)
+      // We'll return null and show a soft warning instead
+    }
+    return null
+  } catch (e: unknown) {
+    if (e instanceof Error) {
+      if (e.name === 'TimeoutError') return 'Connection timed out — check your internet'
+      return e.message
+    }
+    return 'Unknown error during verification'
   }
 }
 
-// ── Provider definitions ───────────────────────────────────────────────
-interface ProviderDef {
-  name: string
-  label: string
-  baseUrl: string
-  apiKeyLabel: string
-  apiKeyUrl: string
-  requiresKey: boolean
-  models: Array<{ id: string; label: string; description: string }>
-}
-
-const PROVIDERS: ProviderDef[] = [
-  {
-    name: 'openrouter',
-    label: 'OpenRouter',
-    baseUrl: 'https://openrouter.ai/api/v1',
-    apiKeyLabel: 'OpenRouter API Key',
-    apiKeyUrl: 'https://openrouter.ai/keys',
-    requiresKey: true,
-    models: [
-      {
-        id: 'deepseek/deepseek-chat-v3-0324',
-        label: 'DeepSeek V3 (0324)',
-        description: 'Best value · native tools · $0.27/M tokens',
-      },
-      {
-        id: 'anthropic/claude-sonnet-4-5',
-        label: 'Claude Sonnet 4.5',
-        description: 'Top-tier coding · $3/M in, $15/M out',
-      },
-      {
-        id: 'anthropic/claude-3.5-sonnet',
-        label: 'Claude 3.5 Sonnet',
-        description: 'Great coding · $3/M in, $15/M out',
-      },
-      {
-        id: 'google/gemini-2.5-flash-preview',
-        label: 'Gemini 2.5 Flash',
-        description: 'Fast & cheap · ~$0.15/M tokens',
-      },
-      {
-        id: 'qwen/qwen3-235b-a22b',
-        label: 'Qwen 3 235B',
-        description: 'Open source · free tier available',
-      },
-      {
-        id: 'meta-llama/llama-4-maverick',
-        label: 'Llama 4 Maverick',
-        description: 'Open source · solid tool calling',
-      },
-      {
-        id: '__custom__',
-        label: 'Enter custom model ID…',
-        description: 'Type any model available on OpenRouter',
-      },
-    ],
-  },
-  {
-    name: 'openai',
-    label: 'OpenAI',
-    baseUrl: 'https://api.openai.com/v1',
-    apiKeyLabel: 'OpenAI API Key',
-    apiKeyUrl: 'https://platform.openai.com/api-keys',
-    requiresKey: true,
-    models: [
-      {
-        id: 'o3',
-        label: 'o3',
-        description: 'Most capable reasoning model',
-      },
-      {
-        id: 'gpt-4.1',
-        label: 'GPT-4.1',
-        description: 'Latest GPT-4 · strong tool calling',
-      },
-      {
-        id: 'gpt-4o',
-        label: 'GPT-4o',
-        description: 'Multimodal · fast · affordable',
-      },
-      {
-        id: 'gpt-4o-mini',
-        label: 'GPT-4o Mini',
-        description: 'Fast & cheap · great for drafts',
-      },
-      {
-        id: '__custom__',
-        label: 'Enter custom model ID…',
-        description: 'Type any OpenAI model ID',
-      },
-    ],
-  },
-  {
-    name: 'ollama',
-    label: 'Ollama (Local)',
-    baseUrl: 'http://localhost:11434/v1',
-    apiKeyLabel: '',
-    apiKeyUrl: '',
-    requiresKey: false,
-    models: [
-      {
-        id: 'qwen2.5-coder:32b',
-        label: 'Qwen 2.5 Coder 32B',
-        description: 'Best local coder · ~20GB VRAM',
-      },
-      {
-        id: 'deepseek-coder-v2:16b',
-        label: 'DeepSeek Coder V2 16B',
-        description: 'Great coder · ~9GB VRAM',
-      },
-      {
-        id: 'llama3.1:8b',
-        label: 'Llama 3.1 8B',
-        description: 'Fast & lightweight · ~5GB VRAM',
-      },
-      {
-        id: '__custom__',
-        label: 'Enter custom model name…',
-        description: 'Type any locally pulled model name',
-      },
-    ],
-  },
-  {
-    name: 'custom',
-    label: 'Custom / Other',
-    baseUrl: '',
-    apiKeyLabel: 'API Key (if required)',
-    apiKeyUrl: '',
-    requiresKey: false,
-    models: [
-      {
-        id: '__custom__',
-        label: 'Enter model ID…',
-        description: 'Compatible with any OpenAI-format API',
-      },
-    ],
-  },
-]
-
-// ── Step types ─────────────────────────────────────────────────────────
-type Step = 'home' | 'provider' | 'baseurl' | 'apikey' | 'model' | 'custommodel' | 'confirm'
-
-// ── Helpers ────────────────────────────────────────────────────────────
-function StepHeader({ step, total, title }: { step: number; total: number; title: string }) {
-  return (
-    <Box marginBottom={1} flexDirection="column">
-      <Box gap={2}>
-        <Text bold color="cyan">{title}</Text>
-        <Text dimColor>({step}/{total})</Text>
-      </Box>
-      <Text dimColor>{'─'.repeat(50)}</Text>
-    </Box>
-  )
-}
-
-function HintBar({ hints }: { hints: string[] }) {
-  return (
-    <Box marginTop={1}>
-      <Text dimColor>{hints.join(' · ')}</Text>
-    </Box>
-  )
-}
-
-// ── Main BYOK Component ───────────────────────────────────────────────
+// ── Component ──────────────────────────────────────────────────────────
 function BYOKSetup({ onDone }: { onDone: LocalJSXCommandOnDone }) {
-  const saved = React.useMemo(() => loadSavedConfig(), [])
-
-  const [step, setStep] = React.useState<Step>('home')
-  const [selectedProviderIdx, setSelectedProviderIdx] = React.useState(0)
-  const [selectedModelIdx, setSelectedModelIdx] = React.useState(0)
-  const [apiKey, setApiKey] = React.useState('')
-  const [customBaseUrl, setCustomBaseUrl] = React.useState('')
-  const [customBaseUrlCursor, setCustomBaseUrlCursor] = React.useState(0)
-  const [customModelId, setCustomModelId] = React.useState('')
-  const [customModelCursor, setCustomModelCursor] = React.useState(0)
-  const [apiKeyCursor, setApiKeyCursor] = React.useState(0)
-  const [error, setError] = React.useState<string | null>(null)
+  const saved = React.useMemo(() => loadSaved(), [])
   const setAppState = useSetAppState()
 
-  const provider = PROVIDERS[selectedProviderIdx]!
-  const model = provider.models[selectedModelIdx]
-  const isCustomModel = model?.id === '__custom__'
-  const isCustomProvider = provider.name === 'custom'
-  const TOTAL_STEPS = 3
+  const [step, setStep] = React.useState<Step>('pick')
+  const [providerIdx, setProviderIdx] = React.useState(0)          // 0=OpenRouter, 1=OpenAI
+  const [apiKey, setApiKey] = React.useState('')
+  const [apiKeyCursor, setApiKeyCursor] = React.useState(0)
+  const [model, setModel] = React.useState('')
+  const [modelCursor, setModelCursor] = React.useState(0)
+  const [verifying, setVerifying] = React.useState(false)
+  const [verifyWarn, setVerifyWarn] = React.useState<string | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
 
-  // ── Home screen (show saved config or start fresh) ─────────────────────
+  // ── Key handling ───────────────────────────────────────────────────
   useInput((input, key) => {
-    setError(null)
+    if (verifying) return   // lock while async verification runs
 
-    if (step === 'home') {
+    if (step === 'pick') {
       if (key.escape || input === 'q') {
-        onDone('BYOK setup cancelled', { display: 'skip' })
+        onDone('', { display: 'skip' })
         return
       }
-      if (key.return || input === 'n') {
-        setStep('provider')
-        return
-      }
-      if (input === 'r' && saved.baseUrl) {
-        // Remove saved config
-        try {
-          if (existsSync(BYOK_ENV_PATH)) {
-            writeFileSync(BYOK_ENV_PATH, '', 'utf8')
-          }
-          process.env.LLM_BASE_URL = ''
-          process.env.LLM_API_KEY = ''
-          process.env.LLM_MODEL = ''
-        } catch { /* ignore */ }
-        onDone('BYOK configuration removed', { display: 'system' })
-        return
-      }
-    }
-
-    if (step === 'provider') {
-      if (key.escape) {
-        setStep('home')
-        return
-      }
-      if (key.upArrow) {
-        setSelectedProviderIdx(i => Math.max(0, i - 1))
-        setSelectedModelIdx(0)
-      } else if (key.downArrow) {
-        setSelectedProviderIdx(i => Math.min(PROVIDERS.length - 1, i + 1))
-        setSelectedModelIdx(0)
-      } else if (key.return) {
-        if (isCustomProvider) {
-          setCustomBaseUrl('')
-          setStep('baseurl')
-        } else if (provider.requiresKey) {
-          setApiKey('')
-          setStep('apikey')
-        } else {
-          setStep('model')
+      if (key.upArrow) setProviderIdx(i => Math.max(0, i - 1))
+      if (key.downArrow) setProviderIdx(i => Math.min(1, i + 1))
+      if (key.return) {
+        if (providerIdx === 1) {
+          // OpenAI — coming soon, do nothing (already shown in UI)
+          return
         }
+        setError(null)
+        setStep('apikey')
       }
+      return
     }
 
-    if (step === 'baseurl') {
-      if (key.escape) {
-        setStep('provider')
-        return
-      }
-      // baseurl handled via TextInput onSubmit
+    if (step === 'apikey') {
+      if (key.escape) { setError(null); setStep('pick'); return }
+      // TextInput onSubmit handles Enter
+      return
     }
 
     if (step === 'model') {
-      if (key.escape) {
-        if (provider.requiresKey) {
-          setStep('apikey')
-        } else {
-          setStep('provider')
-        }
-        return
-      }
-      if (key.upArrow) {
-        setSelectedModelIdx(i => Math.max(0, i - 1))
-      } else if (key.downArrow) {
-        setSelectedModelIdx(i => Math.min(provider.models.length - 1, i + 1))
-      } else if (key.return) {
-        if (isCustomModel) {
-          setCustomModelId('')
-          setStep('custommodel')
-        } else {
-          setStep('confirm')
-        }
-      }
+      if (key.escape) { setError(null); setStep('apikey'); return }
+      // TextInput onSubmit handles Enter
+      return
     }
 
-    if (step === 'custommodel') {
-      if (key.escape) {
+    if (step === 'done_err') {
+      if (key.escape || input === 'q' || key.return) {
+        setError(null)
+        setVerifyWarn(null)
         setStep('model')
-        return
       }
-      // handled via TextInput onSubmit
-    }
-
-    if (step === 'confirm') {
-      if (key.escape || input === 'n') {
-        setStep('model')
-        return
-      }
-      if (key.return || input === 'y') {
-        applyConfig()
-      }
+      return
     }
   })
 
-  // ── Input handlers ─────────────────────────────────────────────────
-  function handleBaseUrlSubmit(value: string) {
-    const trimmed = value.trim().replace(/\/$/, '')
-    if (!trimmed) {
-      setError('Base URL cannot be empty')
-      return
-    }
-    if (!trimmed.startsWith('http')) {
-      setError('Must start with http:// or https://')
-      return
-    }
+  // ── Submit handlers ────────────────────────────────────────────────
+  function handleKeySubmit(val: string) {
+    const t = val.trim()
+    if (!t) { setError('API key cannot be empty'); return }
+    if (t.length < 10) { setError('That key looks too short — double check it'); return }
     setError(null)
-    setCustomBaseUrl(trimmed)
-    setStep('apikey')
-  }
-
-  function handleApiKeySubmit(value: string) {
-    const trimmed = value.trim()
-    if (provider.requiresKey && !trimmed) {
-      setError('API key cannot be empty')
-      return
-    }
-    if (provider.requiresKey && trimmed.length < 8) {
-      setError('API key looks too short — double-check it')
-      return
-    }
-    setError(null)
-    setApiKey(trimmed)
+    setApiKey(t)
     setStep('model')
   }
 
-  function handleCustomModelSubmit(value: string) {
-    const trimmed = value.trim()
-    if (!trimmed) {
-      setError('Model ID cannot be empty')
-      return
-    }
+  function handleModelSubmit(val: string) {
+    const t = val.trim()
+    if (!t) { setError('Model name cannot be empty'); return }
     setError(null)
-    setCustomModelId(trimmed)
-    setStep('confirm')
+    setModel(t)
+    runVerify(apiKey, t)
   }
 
-  function applyConfig() {
-    const finalBaseUrl = isCustomProvider ? customBaseUrl : provider.baseUrl
-    const finalModel = isCustomModel ? customModelId : (model?.id ?? '')
-    const finalKey = apiKey
-
-    // Apply env vars at runtime — effective immediately for all future requests
-    process.env.LLM_BASE_URL = finalBaseUrl
-    process.env.LLM_API_KEY = finalKey
-    process.env.LLM_MODEL = finalModel
-
-    // Update app state so /model and status bar show the new model name
-    setAppState(prev => ({
-      ...prev,
-      mainLoopModel: finalModel,
-    }))
-
-    // Persist to ~/.claude/byok.env
-    saveConfig(finalBaseUrl, finalKey, finalModel)
-
-    const keyDisplay = finalKey
-      ? chalk.dim('••••' + finalKey.slice(-4))
-      : chalk.dim('(none)')
-
-    const msg = [
-      '',
-      chalk.cyan.bold('⚡ BYOK Active'),
-      chalk.dim('─'.repeat(40)),
-      chalk.green('✓') + ' Provider: ' + chalk.bold(isCustomProvider ? 'Custom' : provider.label),
-      chalk.green('✓') + ' Base URL: ' + chalk.bold(finalBaseUrl),
-      chalk.green('✓') + ' Model:    ' + chalk.bold(finalModel),
-      chalk.green('✓') + ' API Key:  ' + keyDisplay,
-      '',
-      chalk.green.bold('Connected!') + ' Your provider is now active.',
-      chalk.dim(`Config saved to: ${BYOK_ENV_PATH}`),
-      chalk.dim('Run /byok again to change · Esc to dismiss'),
-    ].join('\n')
-
-    onDone(msg, { display: 'system' })
+  function runVerify(key: string, mdl: string) {
+    setVerifying(true)
+    setVerifyWarn(null)
+    setStep('verify')
+    verifyOpenRouter(key, mdl).then(err => {
+      setVerifying(false)
+      if (err) {
+        setError(err)
+        setStep('done_err')
+      } else {
+        applyConfig(key, mdl)
+      }
+    })
   }
 
-  // ── Render: Home ───────────────────────────────────────────────────
-  if (step === 'home') {
-    const hasSaved = !!(saved.baseUrl || saved.model)
+  function applyConfig(key: string, mdl: string) {
+    const baseUrl = OPENROUTER_BASE
+
+    // Apply runtime env vars
+    process.env.LLM_BASE_URL = baseUrl
+    process.env.LLM_API_KEY = key
+    process.env.LLM_MODEL = mdl
+
+    // Push model into bootstrap state so getMainLoopModel() picks it up
+    setMainLoopModelOverride(mdl)
+
+    // Push into React AppState so status bar / /model command reflects it
+    setAppState(prev => ({ ...prev, mainLoopModel: mdl }))
+
+    // Persist to disk
+    persist(baseUrl, key, mdl)
+
+    const masked = '••••' + key.slice(-4)
+    onDone(
+      [
+        '',
+        '\x1b[36m\x1b[1m⚡ BYOK Connected — OpenRouter\x1b[0m',
+        '\x1b[2m' + '─'.repeat(42) + '\x1b[0m',
+        `\x1b[32m✓\x1b[0m Model:   \x1b[1m${mdl}\x1b[0m`,
+        `\x1b[32m✓\x1b[0m API Key: \x1b[2m${masked}\x1b[0m`,
+        '',
+        '\x1b[32mReady!\x1b[0m Your model is active. Use \x1b[36m/model\x1b[0m to confirm.',
+        '\x1b[2mRun /byok again to change · saved to ~/.claude/byok.env\x1b[0m',
+      ].join('\n'),
+      { display: 'system' },
+    )
+  }
+
+  // ── Render helpers ─────────────────────────────────────────────────
+  const providers = [
+    { label: 'OpenRouter', sub: 'openrouter.ai — access 300+ models with one key', coming: false },
+    { label: 'OpenAI',     sub: 'Coming soon',                                      coming: true  },
+  ]
+
+  // STEP: provider pick
+  if (step === 'pick') {
+    const hasSaved = !!(saved.baseUrl && saved.model)
     return (
-      <Box flexDirection="column" marginLeft={1}>
-        <Box marginBottom={1} flexDirection="column">
-          <Text bold color="cyan">⚡ Bring Your Own Key (BYOK)</Text>
-          <Text dimColor>{'─'.repeat(50)}</Text>
+      <Box flexDirection="column" paddingLeft={1}>
+        <Box flexDirection="column" marginBottom={1}>
+          <Text bold color="cyan">⚡ Bring Your Own Key</Text>
+          <Text dimColor>{'─'.repeat(40)}</Text>
         </Box>
 
-        {hasSaved ? (
-          <Box flexDirection="column" gap={0}>
-            <Box marginBottom={1}>
-              <Text color="green">✓ </Text>
-              <Text>Active configuration:</Text>
-            </Box>
-            <Box marginLeft={2} flexDirection="column">
-              <Text>  Provider URL: <Text bold>{saved.baseUrl ?? '(not set)'}</Text></Text>
-              <Text>  Model:        <Text bold>{saved.model ?? '(not set)'}</Text></Text>
-              <Text>  API Key:      <Text dimColor>{saved.apiKey ? '••••' + saved.apiKey.slice(-4) : '(none)'}</Text></Text>
-            </Box>
-            <Box marginTop={1} flexDirection="column">
-              <Text color="cyan">  [n] </Text><Text>Change configuration</Text>
-              <Text color="yellow">  [r] </Text><Text>Remove saved config</Text>
-              <Text dimColor>  [q/Esc] Cancel</Text>
-            </Box>
-          </Box>
-        ) : (
-          <Box flexDirection="column">
-            <Text>Connect Claude Code to any OpenAI-compatible LLM provider.</Text>
-            <Text dimColor>Works with OpenRouter, OpenAI, Ollama, and more.</Text>
-            <Box marginTop={1}>
-              <Text color="cyan">  [Enter] </Text><Text>Start setup</Text>
-            </Box>
-            <Text dimColor>  [q/Esc]  Cancel</Text>
+        {hasSaved && (
+          <Box flexDirection="column" marginBottom={1}>
+            <Text color="green">✓ Active: <Text bold>{saved.model}</Text>
+              <Text dimColor>  via {saved.baseUrl}</Text>
+            </Text>
           </Box>
         )}
-      </Box>
-    )
-  }
 
-  // ── Render: Provider selection ─────────────────────────────────────
-  if (step === 'provider') {
-    return (
-      <Box flexDirection="column" marginLeft={1}>
-        <StepHeader step={1} total={TOTAL_STEPS} title="Select Provider" />
-        {PROVIDERS.map((p, i) => (
-          <Box key={p.name} gap={1}>
-            <Text color={i === selectedProviderIdx ? 'cyan' : 'white'}>
-              {i === selectedProviderIdx ? '❯' : ' '} {p.label}
-            </Text>
-            {i === selectedProviderIdx && (
-              <Text dimColor>— {p.baseUrl || 'custom URL'}</Text>
-            )}
-          </Box>
-        ))}
-        <HintBar hints={['↑↓ navigate', 'Enter select', 'Esc back']} />
-      </Box>
-    )
-  }
-
-  // ── Render: Custom base URL ────────────────────────────────────────
-  if (step === 'baseurl') {
-    return (
-      <Box flexDirection="column" marginLeft={1}>
-        <StepHeader step={1} total={TOTAL_STEPS} title="Custom Provider URL" />
-        <Text dimColor>Enter the OpenAI-compatible API base URL:</Text>
-        <Text dimColor>  e.g. http://localhost:11434/v1</Text>
-        <Text dimColor>       https://my-llm-proxy.example.com/v1</Text>
-        {error && <Box marginTop={1}><Text color="red">⚠ {error}</Text></Box>}
-        <Box marginTop={1}>
-          <Text color="cyan">URL ❯ </Text>
-          <TextInput
-            value={customBaseUrl}
-            onChange={setCustomBaseUrl}
-            onSubmit={handleBaseUrlSubmit}
-            placeholder="https://..."
-            columns={70}
-            cursorOffset={customBaseUrlCursor}
-            onChangeCursorOffset={setCustomBaseUrlCursor}
-            focus
-            showCursor
-          />
+        <Text dimColor>Select provider:</Text>
+        <Box flexDirection="column" marginTop={1} marginBottom={1}>
+          {providers.map((p, i) => {
+            const sel = i === providerIdx
+            return (
+              <Box key={p.label} flexDirection="column">
+                <Box>
+                  <Text color={sel ? 'cyan' : undefined}>
+                    {sel ? '❯ ' : '  '}
+                  </Text>
+                  <Text bold={sel} color={p.coming ? 'gray' : (sel ? 'cyan' : undefined)}>
+                    {p.label}
+                  </Text>
+                  {p.coming && <Text color="yellow">  [coming soon]</Text>}
+                </Box>
+                {sel && (
+                  <Box paddingLeft={3}>
+                    <Text dimColor>{p.sub}</Text>
+                  </Box>
+                )}
+              </Box>
+            )
+          })}
         </Box>
-        <HintBar hints={['Enter confirm', 'Esc back']} />
+
+        <Text dimColor>↑↓ navigate · Enter select · q/Esc cancel</Text>
       </Box>
     )
   }
 
-  // ── Render: API key input ──────────────────────────────────────────
+  // STEP: API key
   if (step === 'apikey') {
     return (
-      <Box flexDirection="column" marginLeft={1}>
-        <StepHeader step={provider.requiresKey ? 2 : 1} total={TOTAL_STEPS} title={`API Key — ${provider.label}`} />
-        {provider.apiKeyUrl ? (
-          <Text dimColor>Get your key: <Text>{provider.apiKeyUrl}</Text></Text>
-        ) : (
-          <Text dimColor>Enter your API key (or leave blank if not required):</Text>
-        )}
-        {error && <Box marginTop={1}><Text color="red">⚠ {error}</Text></Box>}
-        <Box marginTop={1}>
+      <Box flexDirection="column" paddingLeft={1}>
+        <Box flexDirection="column" marginBottom={1}>
+          <Text bold color="cyan">⚡ OpenRouter — API Key  <Text dimColor>(1/2)</Text></Text>
+          <Text dimColor>{'─'.repeat(40)}</Text>
+        </Box>
+
+        <Text dimColor>Get your key at: <Text>openrouter.ai/keys</Text></Text>
+        <Box marginTop={1} marginBottom={1}>
           <Text color="cyan">Key ❯ </Text>
           <TextInput
             value={apiKey}
-            onChange={setApiKey}
-            onSubmit={handleApiKeySubmit}
+            onChange={v => { setApiKey(v); setError(null) }}
+            onSubmit={handleKeySubmit}
             mask="*"
-            placeholder={provider.requiresKey ? 'sk-…' : '(optional, press Enter to skip)'}
-            columns={70}
+            placeholder="sk-or-..."
+            columns={65}
             cursorOffset={apiKeyCursor}
             onChangeCursorOffset={setApiKeyCursor}
             focus
             showCursor
           />
         </Box>
-        <HintBar hints={['Enter confirm', 'Esc back']} />
+
+        {error && <Text color="red">⚠  {error}</Text>}
+        <Text dimColor>Enter to confirm · Esc to go back</Text>
       </Box>
     )
   }
 
-  // ── Render: Model selection ────────────────────────────────────────
+  // STEP: model name
   if (step === 'model') {
-    const stepNum = isCustomProvider ? 2 : (provider.requiresKey ? 3 : 2)
     return (
-      <Box flexDirection="column" marginLeft={1}>
-        <StepHeader step={stepNum} total={TOTAL_STEPS} title={`Select Model — ${provider.label}`} />
-        {provider.models.map((m, i) => (
-          <Box key={m.id} flexDirection="column">
-            <Box gap={1}>
-              <Text color={i === selectedModelIdx ? 'cyan' : 'white'}>
-                {i === selectedModelIdx ? '❯' : ' '} {m.label}
-              </Text>
-            </Box>
-            {i === selectedModelIdx && (
-              <Box marginLeft={4}>
-                <Text dimColor>{m.description}</Text>
-              </Box>
-            )}
-          </Box>
-        ))}
-        <HintBar hints={['↑↓ navigate', 'Enter select', 'Esc back']} />
-      </Box>
-    )
-  }
+      <Box flexDirection="column" paddingLeft={1}>
+        <Box flexDirection="column" marginBottom={1}>
+          <Text bold color="cyan">⚡ OpenRouter — Model  <Text dimColor>(2/2)</Text></Text>
+          <Text dimColor>{'─'.repeat(40)}</Text>
+        </Box>
 
-  // ── Render: Custom model ID ────────────────────────────────────────
-  if (step === 'custommodel') {
-    return (
-      <Box flexDirection="column" marginLeft={1}>
-        <StepHeader step={TOTAL_STEPS} total={TOTAL_STEPS} title="Enter Model ID" />
-        <Text dimColor>
-          Type the exact model identifier (e.g. {provider.name === 'ollama' ? 'llama3:8b' : 'deepseek/deepseek-chat-v3-0324'}):
-        </Text>
-        {error && <Box marginTop={1}><Text color="red">⚠ {error}</Text></Box>}
-        <Box marginTop={1}>
+        <Text dimColor>Enter the model ID exactly as shown on OpenRouter:</Text>
+        <Text dimColor>  e.g. <Text>deepseek/deepseek-chat-v3-0324</Text></Text>
+        <Text dimColor>       <Text>anthropic/claude-sonnet-4-5</Text></Text>
+        <Text dimColor>       <Text>google/gemini-2.5-flash-preview</Text></Text>
+
+        <Box marginTop={1} marginBottom={1}>
           <Text color="cyan">Model ❯ </Text>
           <TextInput
-            value={customModelId}
-            onChange={setCustomModelId}
-            onSubmit={handleCustomModelSubmit}
-            placeholder={provider.name === 'ollama' ? 'model:tag' : 'provider/model-name'}
-            columns={65}
-            cursorOffset={customModelCursor}
-            onChangeCursorOffset={setCustomModelCursor}
+            value={model}
+            onChange={v => { setModel(v); setError(null) }}
+            onSubmit={handleModelSubmit}
+            placeholder="provider/model-name"
+            columns={60}
+            cursorOffset={modelCursor}
+            onChangeCursorOffset={setModelCursor}
             focus
             showCursor
           />
         </Box>
-        <HintBar hints={['Enter confirm', 'Esc back to model list']} />
+
+        {error && <Text color="red">⚠  {error}</Text>}
+        <Text dimColor>Enter to verify · Esc to go back</Text>
       </Box>
     )
   }
 
-  // ── Render: Confirm ────────────────────────────────────────────────
-  if (step === 'confirm') {
-    const finalBaseUrl = isCustomProvider ? customBaseUrl : provider.baseUrl
-    const finalModel = isCustomModel ? customModelId : (model?.id ?? '')
+  // STEP: verifying (spinner)
+  if (step === 'verify') {
     return (
-      <Box flexDirection="column" marginLeft={1}>
-        <Box marginBottom={1} flexDirection="column">
-          <Text bold color="cyan">⚡ Confirm Configuration</Text>
-          <Text dimColor>{'─'.repeat(50)}</Text>
+      <Box flexDirection="column" paddingLeft={1}>
+        <Box flexDirection="column" marginBottom={1}>
+          <Text bold color="cyan">⚡ OpenRouter — Verifying…</Text>
+          <Text dimColor>{'─'.repeat(40)}</Text>
         </Box>
-        <Box flexDirection="column" marginLeft={1}>
-          <Text>  Provider: <Text bold color="cyan">{isCustomProvider ? 'Custom' : provider.label}</Text></Text>
-          <Text>  Base URL: <Text bold>{finalBaseUrl}</Text></Text>
-          <Text>  Model:    <Text bold color="green">{finalModel}</Text></Text>
-          <Text>  API Key:  <Text dimColor>{apiKey ? '••••' + apiKey.slice(-4) : '(none / not required)'}</Text></Text>
-        </Box>
-        <Box marginTop={1} flexDirection="column">
-          <Text dimColor>Config will be saved to: {BYOK_ENV_PATH}</Text>
+        <Box>
+          <Text color="yellow">◌ </Text>
+          <Text>Checking API key with OpenRouter…</Text>
         </Box>
         <Box marginTop={1}>
-          <Text color="cyan">  [Enter/y] </Text><Text>Apply & connect</Text>
+          <Text dimColor>Model: <Text bold>{model}</Text></Text>
         </Box>
-        <Text dimColor>  [Esc/n]   Go back</Text>
+      </Box>
+    )
+  }
+
+  // STEP: verification error
+  if (step === 'done_err') {
+    return (
+      <Box flexDirection="column" paddingLeft={1}>
+        <Box flexDirection="column" marginBottom={1}>
+          <Text bold color="red">⚡ Verification Failed</Text>
+          <Text dimColor>{'─'.repeat(40)}</Text>
+        </Box>
+        <Text color="red">✗  {error}</Text>
+        <Box marginTop={1}>
+          <Text dimColor>Press Enter or Esc to go back and fix the model name</Text>
+        </Box>
       </Box>
     )
   }
@@ -624,7 +368,7 @@ function BYOKSetup({ onDone }: { onDone: LocalJSXCommandOnDone }) {
   return null
 }
 
-// ── Export the command call ────────────────────────────────────────────
+// ── Export ─────────────────────────────────────────────────────────────
 export const call: LocalJSXCommandCall = async (onDone, _context, _args) => {
   return <BYOKSetup onDone={onDone} />
 }
