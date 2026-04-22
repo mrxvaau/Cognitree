@@ -223,19 +223,23 @@ export class LLMClient {
     }
 
     // Build the completion URL.
-    // Handles two cases:
-    //   A) Standard OpenAI-style: baseURL = https://openrouter.ai/api/v1
-    //      → strip trailing /v1, re-append → /v1/chat/completions
-    //   B) Full-path providers (Google, etc.): baseURL = https://.../v1beta/openai
-    //      → already contains the full mount point, just append /chat/completions
+    // Google: baseURL = https://generativelanguage.googleapis.com/v1beta/openai
+    //   → append /chat/completions directly (the path is already the full mount point)
+    // Standard OpenAI-style: baseURL = https://openrouter.ai/api/v1
+    //   → strip any trailing /v1 then append /v1/chat/completions
     const base = this.baseURL.replace(/\/+$/, '') // strip trailing slashes
-    const url = base.endsWith('/v1')
-      ? `${base}/chat/completions`                          // case A: conventional
-      : base.endsWith('/chat/completions')
-        ? base                                              // already full URL
-        : base.includes('/v1/')
-          ? `${base}/chat/completions`                      // case B: full-path (Google)
-          : `${base}/v1/chat/completions`                   // case A fallback
+    let url: string
+    if (isGoogleEndpoint) {
+      // Google's full-path endpoint — just append the method
+      url = `${base}/chat/completions`
+    } else if (base.endsWith('/chat/completions')) {
+      // Already a complete URL
+      url = base
+    } else {
+      // Standard OpenAI convention: normalize so we always have exactly one /v1/
+      const withoutV1 = base.endsWith('/v1') ? base.slice(0, -3) : base
+      url = `${withoutV1}/v1/chat/completions`
+    }
 
     let response: Response
     try {
