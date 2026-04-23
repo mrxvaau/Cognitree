@@ -33,8 +33,18 @@ export function CondensedLogo() {
 
   const cwdDisplay = agentName ? `@${agentName} \u00b7 ${truncatePath(cwd, 45)}` : truncatePath(cwd, 55);
   const storageStr = sysInfo.storageTotal > 0
-    ? `${sysInfo.storageFree} GB free / ${sysInfo.storageTotal} GB`
-    : 'N/A';
+    ? `${sysInfo.storageFree} GB free / ${sysInfo.storageTotal} GB total`
+    : 'Detecting...';
+  const storagePercent = sysInfo.storageTotal > 0
+    ? Math.round(((sysInfo.storageTotal - sysInfo.storageFree) / sysInfo.storageTotal) * 100)
+    : 0;
+
+  // Dynamic divider width based on terminal
+  const innerWidth = Math.max(columns - 8, 40);
+  const makeDivider = (label: string) => {
+    const remaining = innerWidth - label.length - 5;
+    return `\u2500\u2500 ${label} ` + '\u2500'.repeat(Math.max(remaining, 10));
+  };
 
   return (
     <OffscreenFreeze>
@@ -42,7 +52,7 @@ export function CondensedLogo() {
         flexDirection="column"
         borderStyle="round"
         borderColor="claude"
-        borderText={{ content: ` Cognitree v${version} `, position: 'top' as const, align: 'start' as const, offset: 1 }}
+        borderText={{ content: ` \u2726 Cognitree v${version} `, position: 'top' as const, align: 'start' as const, offset: 1 }}
         paddingX={2}
         width={columns}
       >
@@ -52,33 +62,36 @@ export function CondensedLogo() {
         </Box>
 
         {/* Brand */}
-        <Box justifyContent="center">
-          <Text bold={true} color="claude">{'\u2726'} Cognitree {'\u2726'}</Text>
+        <Box justifyContent="center" marginTop={1}>
+          <Text bold={true} color="claude">{'\u2726\u2726\u2726'} C O G N I T R E E {'\u2726\u2726\u2726'}</Text>
         </Box>
         <Box justifyContent="center">
-          <Text dimColor={true}>Welcome back!</Text>
+          <Text color="claude">{'\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500'}</Text>
+        </Box>
+        <Box justifyContent="center">
+          <Text dimColor={true} italic={true}>{'\u{1F331}'} Welcome back! Let's build something amazing.</Text>
         </Box>
 
         {/* Session Section */}
         <Box marginTop={1}>
-          <Text dimColor={true} bold={true}>{'\u2500\u2500 Session \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500'}</Text>
+          <Text color="claude" bold={true}>{makeDivider('\u{1F4CB} Session')}</Text>
         </Box>
-        <Box flexDirection="column" paddingLeft={1}>
-          <Text dimColor={true}>  Time    {timeStr}</Text>
-          <Text dimColor={true}>  Model   {modelDisplayName}{effortSuffix} {'\u00b7'} {billingType}</Text>
-          <Text dimColor={true}>  Dir     {cwdDisplay}</Text>
-          <Text dimColor={true}>  Config  {hasMd ? 'CLAUDE.md found' : 'No CLAUDE.md'}</Text>
+        <Box flexDirection="column" paddingLeft={2}>
+          <Text>  <Text color="claude">{'\u{1F552}'}</Text> <Text dimColor={true}>Time   </Text> <Text>{timeStr}</Text></Text>
+          <Text>  <Text color="claude">{'\u{1F916}'}</Text> <Text dimColor={true}>Model  </Text> <Text bold={true}>{modelDisplayName}{effortSuffix}</Text> <Text dimColor={true}>{'\u00b7'} {billingType}</Text></Text>
+          <Text>  <Text color="claude">{'\u{1F4C2}'}</Text> <Text dimColor={true}>Dir    </Text> <Text>{cwdDisplay}</Text></Text>
+          <Text>  <Text color="claude">{'\u{1F4C4}'}</Text> <Text dimColor={true}>Config </Text> {hasMd ? <Text color="claude">{'\u2713'} CLAUDE.md</Text> : <Text dimColor={true}>{'\u2717'} No CLAUDE.md</Text>}</Text>
         </Box>
 
         {/* System Section */}
         <Box marginTop={1}>
-          <Text dimColor={true} bold={true}>{'\u2500\u2500 System \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500'}</Text>
+          <Text color="claude" bold={true}>{makeDivider('\u{1F5A5}\u{FE0F}  System')}</Text>
         </Box>
-        <Box flexDirection="column" paddingLeft={1} marginBottom={1}>
-          <Text dimColor={true}>  CPU     {sysInfo.cpu} ({sysInfo.cpuCores} cores)</Text>
-          <Text dimColor={true}>  GPU     {sysInfo.gpu}</Text>
-          <Text dimColor={true}>  Disk    {storageStr}</Text>
-          <Text dimColor={true}>  IP      {sysInfo.ip}</Text>
+        <Box flexDirection="column" paddingLeft={2} marginBottom={1}>
+          <Text>  <Text color="claude">{'\u26A1'}</Text> <Text dimColor={true}>CPU    </Text> <Text>{sysInfo.cpu}</Text> <Text dimColor={true}>({sysInfo.cpuCores} cores)</Text></Text>
+          <Text>  <Text color="claude">{'\u{1F3AE}'}</Text> <Text dimColor={true}>GPU    </Text> <Text>{sysInfo.gpu}</Text></Text>
+          <Text>  <Text color="claude">{'\u{1F4BE}'}</Text> <Text dimColor={true}>Disk   </Text> <Text>{storageStr}</Text> {storagePercent > 0 && <Text dimColor={true}>({storagePercent}% used)</Text>}</Text>
+          <Text>  <Text color="claude">{'\u{1F310}'}</Text> <Text dimColor={true}>IP     </Text> <Text>{sysInfo.ip}</Text></Text>
         </Box>
       </Box>
     </OffscreenFreeze>
