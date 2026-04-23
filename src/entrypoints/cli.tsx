@@ -157,6 +157,19 @@ async function main(): Promise<void> {
           if (value && !process.env[key]) process.env[key] = value;
         }
       }
+
+      // ── Auto-enable Simple Mode for non-Anthropic BYOK profiles ────
+      // Matches the runtime logic in byok.tsx applyAndSave() / applyProfile().
+      // Without this, the full ~7K-token system prompt is sent on every
+      // request even when a BYOK profile is active.
+      const loadedUrl = process.env.LLM_BASE_URL || '';
+      const isNonClaude = loadedUrl &&
+        !loadedUrl.includes('anthropic') &&
+        !loadedUrl.includes('claude');
+      if (isNonClaude) {
+        process.env.CLAUDE_CODE_SIMPLE ??= '1';
+        process.env.CLAUDE_CODE_DISABLE_THINKING ??= '1';
+      }
     }
   } catch { /* Non-fatal — continue without BYOK config */ }
 

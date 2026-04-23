@@ -125,18 +125,20 @@ export class LLMClient {
       return text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim()
     }
 
-    /** Compress a tool parameter schema: remove description, keep type/enum/items */
+    /** Compress a tool parameter schema: remove description, $schema, additionalProperties */
     function _compressParams(params: unknown): unknown {
       if (!params || typeof params !== 'object') return params
       const p = params as Record<string, unknown>
       const result: Record<string, unknown> = {}
       for (const [k, v] of Object.entries(p)) {
+        // Strip top-level metadata that models don't need
+        if (k === '$schema' || k === 'additionalProperties') continue
         if (k === 'properties' && v && typeof v === 'object') {
           const compressed: Record<string, unknown> = {}
           for (const [prop, def] of Object.entries(v as Record<string, unknown>)) {
             if (def && typeof def === 'object') {
-              // Keep only type, enum, items, $ref, required — drop description
-              const { description: _desc, ...rest } = def as Record<string, unknown>
+              // Keep only type, enum, items, $ref, required — drop description, $schema, additionalProperties
+              const { description: _desc, $schema: _s, additionalProperties: _ap, ...rest } = def as Record<string, unknown>
               compressed[prop] = rest
             } else {
               compressed[prop] = def
@@ -254,7 +256,14 @@ export class LLMClient {
           }
           messages.push(assistantMsg as { role: string; content: string | unknown[] })
         } else if (parts.length > 0) {
-          messages.push({ role: msg.role, content: parts })
+          // Flatten text-only messages to plain string (saves array wrapper overhead)
+          const allText = parts.every((p: unknown) => (p as { type: string }).type === 'text')
+          if (allText) {
+            const text = parts.map((p: unknown) => (p as { text: string }).text).join('')
+            messages.push({ role: msg.role, content: text })
+          } else {
+            messages.push({ role: msg.role, content: parts })
+          }
         }
       }
     }
@@ -286,6 +295,34 @@ export class LLMClient {
 
     // Strip tools if the model previously rejected them
     const effectiveTools = _modelToolsUnsupported ? undefined : tools
+
+    // ── BYOK prompt trimmer ─────────────────────────────────────────
+    // Strip heavyweight Anthropic-specific sections from the system prompt
+    // for non-Anthropic endpoints. Saves ~3,600 tokens per request.
+    // This is a safety net — if CLAUDE_CODE_SIMPLE correctly fires, the
+    // system prompt is already tiny and these regexes will be no-ops.
+    const isNonAnthropicEndpoint = !this.baseURL.includes('anthropic') &&
+      !this.baseURL.includes('claude')
+    if (isNonAnthropicEndpoint) {
+      const sysIdx = messages.findIndex((m: Record<string, unknown>) => m.role === 'system')
+      if (sysIdx >= 0) {
+        const sysMsg = messages[sysIdx] as Record<string, unknown>
+        let content = String(sysMsg.content ?? '')
+        if (content.length > 500) {
+          // Strip "# auto memory" section (~2,200 tokens of memory management instructions)
+          content = content.replace(/# auto memory[\s\S]*?(?=\n# [A-Z]|$)/i, '')
+          // Strip "# Executing actions with care" section (~800 tokens of safety warnings)
+          content = content.replace(/# Executing actions with care[\s\S]*?(?=\n# [A-Z]|$)/i, '')
+          // Strip XML <types>...</types> blocks (~600 tokens of memory type examples)
+          content = content.replace(/<types>[\s\S]*?<\/types>/g, '')
+          // Strip "# Session-specific guidance" section
+          content = content.replace(/# Session-specific guidance[\s\S]*?(?=\n# [A-Z]|$)/i, '')
+          // Collapse multiple blank lines left by removals
+          content = content.replace(/\n{3,}/g, '\n\n')
+          messages[sysIdx] = { ...sysMsg, content: content.trim() }
+        }
+      }
+    }
 
     // Detect providers that don't support all OpenAI request fields.
     // Google's generativelanguage endpoint rejects 'stream_options' with HTTP 400.
