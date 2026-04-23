@@ -4,7 +4,7 @@ import { executeShellCommandsInPrompt } from '../utils/promptShellExecution.js'
 import { createMovedToPluginCommand } from './createMovedToPluginCommand.js'
 
 const SECURITY_REVIEW_MARKDOWN = `---
-allowed-tools: Bash(git diff:*), Bash(git status:*), Bash(git log:*), Bash(git show:*), Bash(git remote show:*), Read, Glob, Grep, LS, Task
+allowed-tools: Bash(git diff:*), Bash(git status:*), Bash(git log:*), Bash(git show:*), Bash(git remote show:*), Read, Glob, Grep, LS
 description: Complete a security review of the pending changes on the current branch
 ---
 
@@ -187,11 +187,11 @@ FALSE POSITIVE FILTERING:
 
 START ANALYSIS:
 
-Begin your analysis now. Do this in 3 steps:
+Analyze the diff above directly. Do NOT spawn sub-tasks or agents. Perform a single-pass review:
 
-1. Use a sub-task to identify vulnerabilities. Use the repository exploration tools to understand the codebase context, then analyze the PR changes for security implications. In the prompt for this sub-task, include all of the above.
-2. Then for each vulnerability identified by the above sub-task, create a new sub-task to filter out false-positives. Launch these sub-tasks as parallel sub-tasks. In the prompt for these sub-tasks, include everything in the "FALSE POSITIVE FILTERING" instructions.
-3. Filter out any vulnerabilities where the sub-task reported a confidence less than 8.
+1. Read the diff carefully and identify all potential security vulnerabilities.
+2. For each finding, apply the FALSE POSITIVE FILTERING rules above to discard noise.
+3. Only include findings with confidence >= 8 out of 10.
 
 Your final reply must contain the markdown report and nothing else.`
 
