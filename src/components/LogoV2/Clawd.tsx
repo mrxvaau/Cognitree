@@ -74,7 +74,7 @@ export function Clawd(t0) {
   const $ = _c(26);
   let t12;
   if ($[23] === Symbol.for("react.memo_cache_sentinel")) {
-    t12 = <Box flexDirection="column"><Text color="green">{`                '.,
+    t12 = <Box flexDirection="column"><Text color="green" bold={true}>{`                '.,
                   'b      *
                    '$    #.
                     $:   #:
