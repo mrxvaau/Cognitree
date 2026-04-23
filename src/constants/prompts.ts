@@ -454,7 +454,14 @@ export async function getSystemPrompt(
     if (process.env.LLM_BASE_URL) {
       const envInfo = await computeSimpleEnvInfo(model, additionalWorkingDirectories)
       return [
-        `You are an expert AI coding agent operating in a CLI terminal. You help users with software engineering: writing, debugging, refactoring, explaining, and shipping code.
+        `    *
+   /|\\
+  / | \\
+ /__|__\\
+    |
+CC BYOK — Expert AI Coding Agent
+
+You are an expert AI coding agent operating in a CLI terminal. You help users with software engineering: writing, debugging, refactoring, explaining, and shipping code.
 
 # Workflow
 Follow Plan → Execute → Verify for every task:
