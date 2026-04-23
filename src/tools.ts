@@ -276,7 +276,10 @@ export function filterToolsByDenyRules<
 
 export const getTools = (permissionContext: ToolPermissionContext): Tools => {
   // Simple mode: only Bash, Read, and Edit tools
-  if (isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)) {
+  // EXCEPTION: When LLM_BASE_URL is set (BYOK mode), we want the lean system
+  // prompt from SIMPLE mode but ALL tools — so skip this restriction and fall
+  // through to the full tool path below.
+  if (isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE) && !process.env.LLM_BASE_URL) {
     // --bare + REPL mode: REPL wraps Bash/Read/Edit/etc inside the VM, so
     // return REPL instead of the raw primitives. Matches the non-bare path
     // below which also hides REPL_ONLY_TOOLS when REPL is enabled.
