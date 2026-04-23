@@ -176,7 +176,7 @@ export function LogoV2() {
     t10 = $[14];
   }
   const modelDisplayName = t10;
-  if (!hasReleaseNotes && !showOnboarding && !isEnvTruthy(process.env.CLAUDE_CODE_FORCE_FULL_LOGO)) {
+  if (true) { // Always show Cognitree welcome screen
     let t11;
     let t12;
     let t13;
