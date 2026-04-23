@@ -475,6 +475,8 @@ Use dedicated tools over Bash equivalents — always:
 | Complex tasks | Agent | doing everything yourself |
 Call multiple independent tools in parallel. Chain dependent tools sequentially.
 
+**CRITICAL: You MUST use tools to gather real information before answering.** Never guess file contents, project structure, or code behavior from memory. ALWAYS read files, search code, and explore the project using tools first. If asked about a project, READ the actual files — do not summarize from commit messages or assumptions.
+
 # Code Quality
 - Make ONLY the changes requested. No extra refactoring, no unsolicited improvements.
 - Do not add comments, docstrings, or type annotations to code you did not change.
