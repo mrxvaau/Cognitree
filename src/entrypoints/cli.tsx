@@ -118,15 +118,43 @@ async function main(): Promise<void> {
     const byokPath = pathJoin(home(), '.claude', 'byok.env');
     if (exists(byokPath) && !process.env.LLM_BASE_URL) {
       const content = readFile(byokPath, 'utf8');
-      for (const line of content.split('\n')) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) continue;
-        const eq = trimmed.indexOf('=');
-        if (eq === -1) continue;
-        const key = trimmed.slice(0, eq).trim();
-        const value = trimmed.slice(eq + 1).trim();
-        if (value && !process.env[key]) {
-          process.env[key] = value;
+
+      // ── New multi-profile format: blocks starting with # PROFILE:<name> ──
+      if (content.includes('# PROFILE:')) {
+        const blocks = content.split(/^# PROFILE:/m).filter(b => b.trim());
+        let activeKv: Record<string, string> | null = null;
+
+        for (const block of blocks) {
+          const lines = block.split('\n');
+          const kv: Record<string, string> = {};
+          for (const line of lines.slice(1)) {
+            const t = line.trim();
+            if (!t || t.startsWith('#')) continue;
+            const eq = t.indexOf('=');
+            if (eq === -1) continue;
+            kv[t.slice(0, eq).trim()] = t.slice(eq + 1).trim();
+          }
+          // Prefer the block explicitly marked active
+          if (kv['LLM_ACTIVE'] === 'true') { activeKv = kv; break; }
+          // Fallback to last profile if none is marked
+          activeKv = kv;
+        }
+
+        if (activeKv) {
+          for (const [k, v] of Object.entries(activeKv)) {
+            if (v && !process.env[k]) process.env[k] = v;
+          }
+        }
+      } else {
+        // ── Legacy single-entry format ──────────────────────────────────
+        for (const line of content.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith('#')) continue;
+          const eq = trimmed.indexOf('=');
+          if (eq === -1) continue;
+          const key = trimmed.slice(0, eq).trim();
+          const value = trimmed.slice(eq + 1).trim();
+          if (value && !process.env[key]) process.env[key] = value;
         }
       }
     }
@@ -399,6 +427,17 @@ async function main(): Promise<void> {
   // option building (not just inside the action handler).
   if (args.includes('--bare')) {
     process.env.CLAUDE_CODE_SIMPLE = '1';
+  }
+
+  // --capture / -cap: enable request capture for debugging token usage.
+  // Logs every API request body with per-section token breakdown to:
+  //   ~/.claude/captures/capture-NNNN.json (per-request full dump)
+  //   ~/.claude/captures/index.json (cumulative index)
+  // Also prints a colorized analysis to stderr in real-time.
+  if (args.includes('--capture') || args.includes('-cap')) {
+    process.env.CLAUDE_CAPTURE = '1';
+    // Strip from argv so Commander doesn't reject as unknown option
+    process.argv = process.argv.filter(a => a !== '--capture' && a !== '-cap');
   }
 
   // No special flags detected, load and run the full CLI

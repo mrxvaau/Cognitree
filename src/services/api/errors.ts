@@ -491,11 +491,10 @@ export function getAssistantMessageFromError(
       })
     }
 
-    // Generic LLM 429 — show the raw error, not Anthropic-specific messages
-    const rawMsg = error.message || 'Rate limit exceeded'
-    const innerMsg = rawMsg.match(/"message"\s*:\s*"([^"]*)"/)?.[1]
+    // Generic LLM 429 — error.message is already formatted by _parseRateLimitMessage
+    // in llmClient.ts (clean one-liner with retry hint). Surface it directly.
     return createAssistantAPIErrorMessage({
-      content: `${API_ERROR_MESSAGE_PREFIX}: Rate limited (429) · ${innerMsg || rawMsg}`,
+      content: error.message || '⚠️  Rate limit exceeded — please wait and try again',
       error: 'rate_limit',
     })
   }
