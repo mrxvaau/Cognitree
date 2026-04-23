@@ -19,19 +19,19 @@ GIT STATUS:
 FILES MODIFIED:
 
 \`\`\`
-!\`git diff --name-only origin/HEAD...\`
+!\`git diff --name-only origin/HEAD... 2>/dev/null || git diff --name-only $(git rev-list --max-parents=0 HEAD) HEAD\`
 \`\`\`
 
 COMMITS:
 
 \`\`\`
-!\`git log --no-decorate origin/HEAD...\`
+!\`git log --no-decorate origin/HEAD... 2>/dev/null || git log --no-decorate\`
 \`\`\`
 
 DIFF CONTENT:
 
 \`\`\`
-!\`git diff origin/HEAD...\`
+!\`git diff origin/HEAD... 2>/dev/null || git diff $(git rev-list --max-parents=0 HEAD) HEAD\`
 \`\`\`
 
 Review the complete diff above. This contains all code changes in the PR.
