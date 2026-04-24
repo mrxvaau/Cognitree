@@ -275,36 +275,9 @@ export function filterToolsByDenyRules<
 }
 
 export const getTools = (permissionContext: ToolPermissionContext): Tools => {
-  // Simple mode: only Bash, Read, and Edit tools
-  // EXCEPTION: When LLM_BASE_URL is set (BYOK mode), we want the lean system
-  // prompt from SIMPLE mode but ALL tools — so skip this restriction and fall
-  // through to the full tool path below.
-  if (isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE) && !process.env.LLM_BASE_URL) {
-    // --bare + REPL mode: REPL wraps Bash/Read/Edit/etc inside the VM, so
-    // return REPL instead of the raw primitives. Matches the non-bare path
-    // below which also hides REPL_ONLY_TOOLS when REPL is enabled.
-    if (isReplModeEnabled() && REPLTool) {
-      const replSimple: Tool[] = [REPLTool]
-      if (
-        feature('COORDINATOR_MODE') &&
-        coordinatorModeModule?.isCoordinatorMode()
-      ) {
-        replSimple.push(TaskStopTool, getSendMessageTool())
-      }
-      return filterToolsByDenyRules(replSimple, permissionContext)
-    }
-    const simpleTools: Tool[] = [BashTool, FileReadTool, FileEditTool]
-    // When coordinator mode is also active, include AgentTool and TaskStopTool
-    // so the coordinator gets Task+TaskStop (via useMergedTools filtering) and
-    // workers get Bash/Read/Edit (via filterToolsForAgent filtering).
-    if (
-      feature('COORDINATOR_MODE') &&
-      coordinatorModeModule?.isCoordinatorMode()
-    ) {
-      simpleTools.push(AgentTool, TaskStopTool, getSendMessageTool())
-    }
-    return filterToolsByDenyRules(simpleTools, permissionContext)
-  }
+  // Simple mode was previously restricted to Bash/Read/Edit only.
+  // Now all models get full tool access for universal agent compatibility.
+  // The lean system prompt from SIMPLE mode handles guidance.
 
   // Get all base tools and filter out special tools that get added conditionally
   const specialTools = new Set([

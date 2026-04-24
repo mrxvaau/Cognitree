@@ -448,10 +448,10 @@ export async function getSystemPrompt(
   mcpClients?: MCPServerConnection[],
 ): Promise<string[]> {
   if (isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)) {
-    // BYOK mode (LLM_BASE_URL set): precision-engineered compact prompt
-    // Synthesized from Claude Code, Cursor, Aider, and OpenAI Codex best practices.
-    // Every line is load-bearing. ~650 tokens for maximum agent effectiveness.
-    if (process.env.LLM_BASE_URL) {
+    // Universal agent prompt — works with ANY model (Qwen, Gemini, GPT, Claude, Llama, etc.)
+    // Precision-engineered from Claude Code, Cursor, Aider, and OpenAI Codex best practices.
+    // Every line is load-bearing. ~700 tokens for maximum agent effectiveness.
+    {
       const envInfo = await computeSimpleEnvInfo(model, additionalWorkingDirectories)
       return [
         `You are an expert AI coding agent operating in a CLI terminal. You help users with software engineering: writing, debugging, refactoring, explaining, and shipping code.
@@ -497,10 +497,6 @@ Confirm with user before: deleting files/branches, force-pushing, dropping table
 ${envInfo}`,
       ]
     }
-    // --bare mode (no BYOK): absolute minimum
-    return [
-      `You are Claude Code, Anthropic's official CLI for Claude.\n\nCWD: ${getCwd()}\nDate: ${getSessionStartDate()}`,
-    ]
   }
 
   const cwd = getCwd()
