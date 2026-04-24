@@ -251,6 +251,19 @@ export const AgentTool = buildTool({
     const startTime = Date.now();
     const model = isCoordinatorMode() ? undefined : modelParam;
 
+    // ── Model Profile Guard ──────────────────────────────────────────
+    // Block agent spawning for models that can't handle it (prevents
+    // infinite loops that burn hundreds of thousands of tokens).
+    const { getActiveProfile: getProfile } = await import('../../utils/model/modelProfile.js');
+    const modelProfile = getProfile();
+    if (!modelProfile.capabilities.multiAgent) {
+      throw new Error(
+        `Model "${modelProfile.name}" does not support multi-agent workflows. ` +
+        `Perform the task directly using your tools (Read, Edit, Bash, Grep, Glob). ` +
+        `Do not attempt to spawn sub-agents.`
+      );
+    }
+
     // Get app state for permission mode and agent filtering
     const appState = toolUseContext.getAppState();
     const permissionMode = appState.toolPermissionContext.mode;

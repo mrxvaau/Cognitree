@@ -1,6 +1,7 @@
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 import { type as osType, version as osVersion, release as osRelease } from 'os'
 import { env } from '../utils/env.js'
+import { getActiveProfile, loadModelProfile } from '../utils/model/modelProfile.js'
 import { getIsGit } from '../utils/git.js'
 import { getCwd } from '../utils/cwd.js'
 import { getIsNonInteractiveSession } from '../bootstrap/state.js'
@@ -449,10 +450,26 @@ export async function getSystemPrompt(
 ): Promise<string[]> {
   if (isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)) {
     // Universal agent prompt — works with ANY model (Qwen, Gemini, GPT, Claude, Llama, etc.)
-    // Precision-engineered from Claude Code, Cursor, Aider, and OpenAI Codex best practices.
-    // Every line is load-bearing. ~700 tokens for maximum agent effectiveness.
+    // Auto-adapts based on model profile. Every line is load-bearing.
     {
       const envInfo = await computeSimpleEnvInfo(model, additionalWorkingDirectories)
+      // Load the model profile for capability-aware prompt construction
+      const profile = loadModelProfile(model)
+
+      // Build profile-specific sections
+      const toolUseRule = profile.quirks.forceToolUse
+        ? `\n**CRITICAL: You MUST use tools to gather real information before answering.** Never guess file contents, project structure, or code behavior from memory. ALWAYS read files, search code, and explore the project using tools first. If asked about a project, READ the actual files — do not summarize from commit messages or assumptions.`
+        : ''
+
+      const agentRule = profile.capabilities.multiAgent
+        ? '| Complex tasks | Agent | doing everything yourself |'
+        : ''
+
+      const spawnRule = !profile.capabilities.multiAgent
+        ? `\n\n# Agent Spawning (DISABLED)
+Do NOT use the Agent tool to spawn sub-agents or sub-tasks. Perform ALL work directly using your tools. One agent, one task — handle it yourself from start to finish.`
+        : ''
+
       return [
         `You are an expert AI coding agent operating in a CLI terminal. You help users with software engineering: writing, debugging, refactoring, explaining, and shipping code.
 
@@ -472,10 +489,9 @@ Use dedicated tools over Bash equivalents — always:
 | Search content | Grep | grep, rg |
 | Find files | Glob | find, ls |
 | Run commands | Bash | — |
-| Complex tasks | Agent | doing everything yourself |
+${agentRule}
 Call multiple independent tools in parallel. Chain dependent tools sequentially.
-
-**CRITICAL: You MUST use tools to gather real information before answering.** Never guess file contents, project structure, or code behavior from memory. ALWAYS read files, search code, and explore the project using tools first. If asked about a project, READ the actual files — do not summarize from commit messages or assumptions.
+${toolUseRule}
 
 # Code Quality
 - Make ONLY the changes requested. No extra refactoring, no unsolicited improvements.
@@ -484,6 +500,16 @@ Call multiple independent tools in parallel. Chain dependent tools sequentially.
 - Validate at system boundaries only (user input, external APIs). Trust internal code.
 - Never introduce security vulnerabilities (injection, XSS, SSRF). Fix them if you spot them.
 - If an approach fails, diagnose WHY before switching tactics. Read errors carefully.
+${spawnRule}
+
+# Token Efficiency (MANDATORY)
+- Never repeat what the user said. Just do the work.
+- Never output filler: no "Sure!", "Let me help", "Great question", "I'll do that for you".
+- Read a file ONCE. Do not re-read files already in your context.
+- If you already know the answer from context, do not call tools redundantly.
+- When showing code changes, show ONLY the changed parts — not the entire file.
+- One concise sentence beats three verbose ones. Lead with the answer.
+- If a task needs 1000 lines of code, write them all. But zero lines of narration before each.
 
 # Safety
 Confirm with user before: deleting files/branches, force-pushing, dropping tables, posting to external services, or any action visible to others. Match scope to what was requested.
