@@ -1,4 +1,4 @@
-﻿// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
+// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 import type {
   ToolResultBlockParam,
   ToolUseBlock,
@@ -110,6 +110,11 @@ import {
 } from './bootstrap/state.js'
 import { createBudgetTracker, checkTokenBudget } from './query/tokenBudget.js'
 import { count } from './utils/array.js'
+import { StuckDetector } from './cognitree/stuckDetector.js'
+import { RecoveryInjector, MAX_RECOVERY_ATTEMPTS } from './cognitree/recoveryInjector.js'
+import { isCognitreeProject } from './cognitree/startup.js'
+import { updateMemory } from './cognitree/memory.js'
+import { reconstructActive } from './cognitree/reconstruct.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const snipModule = feature('HISTORY_SNIP')
@@ -278,6 +283,14 @@ async function* queryLoop(
     transition: undefined,
   }
   const budgetTracker = feature('TOKEN_BUDGET') ? createBudgetTracker() : null
+
+  // ─── Cognitree Track 7: Self-Healing Agent Loop ────────────────────
+  // Initialize stuck detector + recovery injector. These are loop-local:
+  // new instance per queryLoop invocation. Only active for main thread
+  // (subagents have their own loop instances).
+  const stuckDetector = new StuckDetector()
+  const recoveryInjector = new RecoveryInjector()
+  let cognitreeRecoveryAttempts = 0
 
   // task_budget.remaining tracking across compaction boundaries. Undefined
   // until first compact fires — while context is uncompacted the server can
@@ -1407,6 +1420,125 @@ async function* queryLoop(
       }
     }
     queryCheckpoint('query_tool_execution_end')
+
+    // ─── Cognitree Track 7: Stuck Detection + Recovery ─────────────────
+    // Feed tool calls + assistant messages into the detector, then check.
+    // Fires AFTER tool execution but BEFORE attachments/summary so recovery
+    // messages don't interfere with the tool_result ↔ tool_use pairing.
+    stuckDetector.incrementTurn()
+    for (const block of toolUseBlocks) {
+      const matchingResult = toolResults.find(
+        r =>
+          r.type === 'user' &&
+          Array.isArray(r.message.content) &&
+          r.message.content.some(
+            (c: { type: string; tool_use_id?: string }) =>
+              c.type === 'tool_result' && c.tool_use_id === block.id,
+          ),
+      )
+      const resultText =
+        matchingResult?.type === 'user' &&
+        typeof matchingResult.message.content === 'string'
+          ? matchingResult.message.content
+          : ''
+      stuckDetector.recordToolCall(block.name, block.input, resultText)
+    }
+    // Record assistant text for circular reasoning detection
+    const lastAssistant = assistantMessages.at(-1)
+    if (lastAssistant) {
+      const textContent = lastAssistant.message.content
+        .filter((b: { type: string }) => b.type === 'text')
+        .map((b: { type: string; text?: string }) => ('text' in b ? b.text : ''))
+        .join(' ')
+      if (textContent) {
+        stuckDetector.recordAssistantMessage(textContent)
+      }
+    }
+    const stuckSignal = stuckDetector.check()
+    if (
+      stuckSignal.detected &&
+      cognitreeRecoveryAttempts < MAX_RECOVERY_ATTEMPTS
+    ) {
+      cognitreeRecoveryAttempts++
+
+      // Load past mistakes from Cognitree memory (if available)
+      let pastMistakes: string[] = []
+      try {
+        const cwd = process.cwd()
+        if (isCognitreeProject(cwd)) {
+          const cognitreeDir = require('path').join(cwd, '.cognitree')
+          const memState = reconstructActive(cognitreeDir)
+          if (memState?.mistakes) {
+            pastMistakes = memState.mistakes
+              .filter((m: { status?: string }) => m.status === 'active')
+              .slice(-3)
+              .map((m: { text: string; fix?: string }) =>
+                m.fix ? `${m.text} (fix: ${m.fix})` : m.text,
+              )
+          }
+          // Persist current failure as a mistake
+          updateMemory({
+            cognitreeDir,
+            layer: 'mistakes',
+            data: {
+              added: [
+                {
+                  text: `Stuck: ${stuckSignal.pattern} — ${stuckSignal.evidence}`,
+                  fix: stuckSignal.recoveryHint,
+                  severity: cognitreeRecoveryAttempts >= 2 ? 'critical' : 'medium',
+                },
+              ],
+            },
+          })
+        }
+      } catch {
+        // Cognitree not available — proceed without memory
+      }
+
+      // Build recovery message
+      const recovery = recoveryInjector.buildRecovery(
+        stuckSignal,
+        cognitreeRecoveryAttempts,
+        pastMistakes,
+      )
+
+      // Yield warning to TUI
+      yield createSystemMessage(
+        `⚠ Cognitree: detected ${stuckSignal.pattern} — recovery attempt ${cognitreeRecoveryAttempts}/${MAX_RECOVERY_ATTEMPTS}`,
+        'warning',
+      )
+
+      // Inject recovery as user message
+      const recoveryMessage = createUserMessage({
+        content: recovery.injectionText,
+        isMeta: true,
+      })
+
+      stuckDetector.reset()
+
+      const next: State = {
+        messages: [
+          ...messagesForQuery,
+          ...assistantMessages,
+          ...toolResults,
+          recoveryMessage,
+        ],
+        toolUseContext: {
+          ...updatedToolUseContext,
+          queryTracking,
+        },
+        autoCompactTracking: tracking,
+        turnCount: turnCount + 1,
+        maxOutputTokensRecoveryCount: 0,
+        hasAttemptedReactiveCompact: false,
+        pendingToolUseSummary: undefined,
+        maxOutputTokensOverride: undefined,
+        stopHookActive: undefined,
+        transition: { reason: 'cognitree_recovery' },
+      }
+      state = next
+      continue
+    }
 
     // Generate tool use summary after tool batch completes — passed to next recursive call
     let nextPendingToolUseSummary:
