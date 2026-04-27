@@ -1,6 +1,9 @@
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 import addDir from './commands/add-dir/index.js'
 import autofixPr from './commands/autofix-pr/index.js'
+import cognitreeStatus from './commands/cognitree-status.js'
+import cognitreeCheckpoint from './commands/cognitree-checkpoint.js'
+import cognitreeBranch from './commands/cognitree-branch.js'
 import backfillSessions from './commands/backfill-sessions/index.js'
 import btw from './commands/btw/index.js'
 import byok from './commands/byok/index.js'
@@ -262,6 +265,9 @@ const COMMANDS = memoize((): Command[] => [
   advisor,
   agents,
   branch,
+  cognitreeStatus,
+  cognitreeCheckpoint,
+  cognitreeBranch,
   btw,
   byok,
   chrome,

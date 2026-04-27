@@ -59,6 +59,7 @@ import { SLEEP_TOOL_NAME } from '../tools/SleepTool/prompt.js'
 import { TICK_TAG } from './xml.js'
 import { logForDebugging } from '../utils/debug.js'
 import { loadMemoryPrompt } from '../memdir/memdir.js'
+import { getCognitreeInjection } from '../cognitree/startup.js'
 import { isUndercover } from '../utils/undercover.js'
 import { isMcpInstructionsDeltaEnabled } from '../utils/mcpInstructionsDelta.js'
 
@@ -470,7 +471,10 @@ export async function getSystemPrompt(
 Do NOT use the Agent tool to spawn sub-agents or sub-tasks. Perform ALL work directly using your tools. One agent, one task — handle it yourself from start to finish.`
         : ''
 
-      return [
+      // Cognitree memory injection (smart, task-aware)
+      const cognitreeBlock = await getCognitreeInjection(getCwd())
+
+      const result = [
         `You are an expert AI coding agent operating in a CLI terminal. You help users with software engineering: writing, debugging, refactoring, explaining, and shipping code.
 
 # Workflow
@@ -522,6 +526,13 @@ Confirm with user before: deleting files/branches, force-pushing, dropping table
 
 ${envInfo}`,
       ]
+
+      // Append Cognitree memory if available
+      if (cognitreeBlock) {
+        result.push(cognitreeBlock)
+      }
+
+      return result
     }
   }
 
@@ -565,6 +576,7 @@ ${CYBER_RISK_INSTRUCTION}`,
       getSessionSpecificGuidanceSection(enabledTools, skillToolCommands),
     ),
     systemPromptSection('memory', () => loadMemoryPrompt()),
+    systemPromptSection('cognitree', () => getCognitreeInjection(getCwd())),
     systemPromptSection('ant_model_override', () =>
       getAntModelOverrideSection(),
     ),

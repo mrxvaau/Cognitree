@@ -3,6 +3,9 @@
  *
  * Exposes tools and resources for exploring the Claude Code source code.
  * This module is imported by both the STDIO and HTTP entrypoints.
+ *
+ * Token Efficiency: tools answer from MemoryCache (CODEBASE.md) first,
+ * falling back to live file reads only on cache miss.
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -18,6 +21,21 @@ import {
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { MemoryCache } from "./memoryCache.js";
+import {
+  getActiveProfile,
+  adaptToolDescription,
+  adaptContext,
+  adaptResponse,
+  getDetectedFrom,
+  getProfileNames,
+  type MCPModelProfile,
+} from "./modelAdapter.js";
+import { handleGitHistory, type GitHistoryInput } from "./tools/gitHistory.js";
+import { handleTestRunner, type TestRunnerInput } from "./tools/testRunner.js";
+import { handleDepGraph, type DepGraphInput } from "./tools/depGraph.js";
+import { handleSymbolSearch, type SymbolSearchInput } from "./tools/symbolSearch.js";
+import { handleProjectUnderstand, type ProjectUnderstandInput } from "./tools/projectUnderstand.js";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -142,12 +160,56 @@ async function getCommandList(): Promise<CommandInfo[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Context Injection Helper (profile-aware)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract relevant context from the memory cache for a given query.
+ * Adapts depth and length based on the active model profile.
+ */
+function getContextInjection(
+  cache: MemoryCache,
+  query: string,
+  profile: MCPModelProfile
+): string {
+  const section = cache.query(query);
+  if (!section) return "";
+  const adapted = adaptContext(section, profile);
+  if (!adapted) return "";
+  return `--- CODEBASE CONTEXT ---\n${adapted}\n--- END CONTEXT ---\n\n`;
+}
+
+/** Wrap a tool response with source metadata. Profile-aware formatting. */
+function wrapResponse(
+  data: string,
+  source: "memory" | "file",
+  profile: MCPModelProfile,
+  context?: string
+): { content: Array<{ type: "text"; text: string }> } {
+  const prefix = context ?? "";
+  const envelope = { source, tokens_saved: source === "memory", data };
+  const formatted = adaptResponse(envelope, profile);
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: prefix + formatted,
+      },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Server Factory
 // ---------------------------------------------------------------------------
 
-export function createServer(): Server {
+export function createServer(cache?: MemoryCache): Server {
+  // Create a default cache if none provided (for backward compat)
+  const memoryCache = cache ?? new MemoryCache();
+  const profile = getActiveProfile();
+
   const server = new Server(
-    { name: "claude-code-explorer", version: "1.1.0" },
+    { name: "claude-code-explorer", version: "1.4.0" },
     {
       capabilities: {
         tools: {},
@@ -258,20 +320,17 @@ export function createServer(): Server {
     tools: [
       {
         name: "list_tools",
-        description:
-          "List all Claude Code agent tools (BashTool, FileReadTool, etc.) with their source files.",
+        description: adaptToolDescription("list_tools", profile),
         inputSchema: { type: "object" as const, properties: {} },
       },
       {
         name: "list_commands",
-        description:
-          "List all Claude Code slash commands (/commit, /review, /mcp, etc.) with their source files.",
+        description: adaptToolDescription("list_commands", profile),
         inputSchema: { type: "object" as const, properties: {} },
       },
       {
         name: "get_tool_source",
-        description:
-          "Read the full source code of a specific Claude Code tool implementation.",
+        description: adaptToolDescription("get_tool_source", profile),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -290,8 +349,7 @@ export function createServer(): Server {
       },
       {
         name: "get_command_source",
-        description:
-          "Read the source code of a specific Claude Code slash command.",
+        description: adaptToolDescription("get_command_source", profile),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -309,8 +367,7 @@ export function createServer(): Server {
       },
       {
         name: "read_source_file",
-        description:
-          "Read any source file from the Claude Code src/ directory by relative path.",
+        description: adaptToolDescription("read_source_file", profile),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -332,8 +389,7 @@ export function createServer(): Server {
       },
       {
         name: "search_source",
-        description:
-          "Search for a regex pattern across the Claude Code source. Returns matching lines with paths and line numbers.",
+        description: adaptToolDescription("search_source", profile),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -355,7 +411,7 @@ export function createServer(): Server {
       },
       {
         name: "list_directory",
-        description: "List files and subdirectories under src/.",
+        description: adaptToolDescription("list_directory", profile),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -369,9 +425,149 @@ export function createServer(): Server {
       },
       {
         name: "get_architecture",
-        description:
-          "Get a high-level architecture overview of Claude Code.",
+        description: adaptToolDescription("get_architecture", profile),
         inputSchema: { type: "object" as const, properties: {} },
+      },
+      {
+        name: "cache_control",
+        description: adaptToolDescription("cache_control", profile),
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            action: {
+              type: "string",
+              enum: ["reload", "invalidate", "stats", "misses"],
+              description:
+                "reload = force re-read CODEBASE.md; invalidate = clear cache; stats = show hit/miss counts; misses = show miss log",
+            },
+          },
+          required: ["action"],
+        },
+      },
+      {
+        name: "model_info",
+        description: adaptToolDescription("model_info", profile),
+        inputSchema: { type: "object" as const, properties: {} },
+      },
+      {
+        name: "git_history",
+        description: adaptToolDescription("git_history", profile),
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            file: {
+              type: "string",
+              description: "File path relative to project root.",
+            },
+            lines: {
+              type: "string",
+              description: "Line range for blame, e.g. '45-80'.",
+            },
+            depth: {
+              type: "number",
+              description: "How many commits back (default: 10).",
+            },
+            action: {
+              type: "string",
+              enum: ["log", "blame", "diff", "who_changed"],
+              description: "Git action to perform.",
+            },
+          },
+          required: ["action"],
+        },
+      },
+      {
+        name: "test_runner",
+        description: adaptToolDescription("test_runner", profile),
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            pattern: {
+              type: "string",
+              description: "File pattern or specific test name.",
+            },
+            timeout: {
+              type: "number",
+              description: "Timeout in ms (default: 30000).",
+            },
+            mode: {
+              type: "string",
+              enum: ["run", "list", "last_result"],
+              description: "Test mode.",
+            },
+          },
+          required: ["mode"],
+        },
+      },
+      {
+        name: "dep_graph",
+        description: adaptToolDescription("dep_graph", profile),
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            file: {
+              type: "string",
+              description: "File path relative to src root.",
+            },
+            symbol: {
+              type: "string",
+              description: "Symbol name to trace importers of.",
+            },
+            action: {
+              type: "string",
+              enum: ["imports", "imported_by", "circular", "orphans"],
+              description: "Dependency analysis action.",
+            },
+          },
+          required: ["action"],
+        },
+      },
+      {
+        name: "symbol_search",
+        description: adaptToolDescription("symbol_search", profile),
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            query: {
+              type: "string",
+              description: "Symbol name to search for.",
+            },
+            type: {
+              type: "string",
+              enum: ["function", "class", "type", "interface", "const", "any"],
+              description: "Filter by symbol type (default: any).",
+            },
+            exact: {
+              type: "boolean",
+              description: "Exact match (default: false = fuzzy).",
+            },
+          },
+          required: ["query"],
+        },
+      },
+      {
+        name: "project_understand",
+        description: adaptToolDescription("project_understand", profile),
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            action: {
+              type: "string",
+              enum: ["summarize", "purpose", "stack", "entrypoints", "dataflow", "dependencies", "ask"],
+              description: "Analysis action to perform.",
+            },
+            question: {
+              type: "string",
+              description: "Question to answer (only for action: ask).",
+            },
+            depth: {
+              type: "string",
+              enum: ["quick", "deep"],
+              description: "Analysis depth: quick (≤20 files, 8s) or deep (≤60 files, 30s). Default: quick.",
+            },
+          },
+          required: ["action"],
+        },
       },
     ],
   }));
@@ -385,24 +581,27 @@ export function createServer(): Server {
 
       switch (name) {
         case "list_tools": {
+          // Try memory cache first
+          await memoryCache.ensureFresh();
+          const cached = memoryCache.query("tool registry agent tools");
+          if (cached) {
+            return wrapResponse(cached, "memory", profile);
+          }
+          // Cache miss — read live
           const tools = await getToolList();
-          return {
-            content: [
-              { type: "text" as const, text: JSON.stringify(tools, null, 2) },
-            ],
-          };
+          return wrapResponse(JSON.stringify(tools, null, 2), "file", profile);
         }
 
         case "list_commands": {
+          // Try memory cache first
+          await memoryCache.ensureFresh();
+          const cachedCmds = memoryCache.query("slash commands command registry");
+          if (cachedCmds) {
+            return wrapResponse(cachedCmds, "memory", profile);
+          }
+          // Cache miss — read live
           const commands = await getCommandList();
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: JSON.stringify(commands, null, 2),
-              },
-            ],
-          };
+          return wrapResponse(JSON.stringify(commands, null, 2), "file", profile);
         }
 
         case "get_tool_source": {
@@ -431,14 +630,13 @@ export function createServer(): Server {
           if (!filePath || !(await fileExists(filePath)))
             throw new Error(`File not found: tools/${toolName}/${fileName}`);
           const content = await fs.readFile(filePath, "utf-8");
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `// tools/${toolName}/${fileName}\n// ${content.split("\n").length} lines\n\n${content}`,
-              },
-            ],
-          };
+
+          // Context injection — prepend relevant CODEBASE.md section
+          await memoryCache.ensureFresh();
+          const ctx = getContextInjection(memoryCache, toolName, profile);
+
+          const fileContent = `// tools/${toolName}/${fileName}\n// ${content.split("\n").length} lines\n\n${content}`;
+          return wrapResponse(fileContent, "file", profile, ctx);
         }
 
         case "get_command_source": {
@@ -467,9 +665,13 @@ export function createServer(): Server {
           }
           if (!found) throw new Error(`Command not found: ${commandName}`);
 
+          // Context injection
+          await memoryCache.ensureFresh();
+          const cmdCtx = getContextInjection(memoryCache, commandName, profile);
+
           if (!isDir) {
             const content = await fs.readFile(found, "utf-8");
-            return { content: [{ type: "text" as const, text: content }] };
+            return wrapResponse(content, "file", profile, cmdCtx);
           }
 
           const reqFile = (args as Record<string, unknown>)?.fileName as
@@ -482,18 +684,16 @@ export function createServer(): Server {
                 `File not found: commands/${commandName}/${reqFile}`
               );
             const content = await fs.readFile(filePath, "utf-8");
-            return { content: [{ type: "text" as const, text: content }] };
+            return wrapResponse(content, "file", profile, cmdCtx);
           }
 
           const files = await listDir(found);
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `Command: ${commandName}\nFiles:\n${files.map((f) => `  ${f}`).join("\n")}`,
-              },
-            ],
-          };
+          return wrapResponse(
+            `Command: ${commandName}\nFiles:\n${files.map((f) => `  ${f}`).join("\n")}`,
+            "file",
+            profile,
+            cmdCtx
+          );
         }
 
         case "read_source_file": {
@@ -602,6 +802,14 @@ export function createServer(): Server {
         }
 
         case "get_architecture": {
+          // Primary cache target — CODEBASE.md contains the full architecture
+          await memoryCache.ensureFresh();
+          const archSection = memoryCache.query("architecture overview");
+          if (archSection) {
+            return wrapResponse(archSection, "memory", profile);
+          }
+
+          // Cache miss — build from live filesystem
           const topLevel = await listDir(SRC_ROOT);
           const tools = await getToolList();
           const commands = await getCommandList();
@@ -638,7 +846,165 @@ ${commands.map((c) => `- **${c.name}** ${c.isDirectory ? "(directory)" : "(file)
 - **tasks/** — Background task management
 - **server/** — Server/remote mode
 `;
-          return { content: [{ type: "text" as const, text: overview }] };
+          return wrapResponse(overview, "file", profile);
+        }
+
+        case "cache_control": {
+          const action = (args as Record<string, unknown>)?.action as string;
+          if (!action) throw new Error("action is required");
+
+          switch (action) {
+            case "reload": {
+              if (memoryCache["memoryFilePath"]) {
+                await memoryCache.load(memoryCache["memoryFilePath"]);
+              }
+              const stats = memoryCache.getStats();
+              return {
+                content: [
+                  {
+                    type: "text" as const,
+                    text: JSON.stringify(
+                      { action: "reload", success: true, ...stats },
+                      null,
+                      2
+                    ),
+                  },
+                ],
+              };
+            }
+            case "invalidate": {
+              memoryCache.invalidate();
+              return {
+                content: [
+                  {
+                    type: "text" as const,
+                    text: JSON.stringify(
+                      { action: "invalidate", success: true },
+                      null,
+                      2
+                    ),
+                  },
+                ],
+              };
+            }
+            case "stats": {
+              const stats = memoryCache.getStats();
+              return {
+                content: [
+                  {
+                    type: "text" as const,
+                    text: JSON.stringify(stats, null, 2),
+                  },
+                ],
+              };
+            }
+            case "misses": {
+              const log = await memoryCache.getMissLog();
+              return {
+                content: [{ type: "text" as const, text: log }],
+              };
+            }
+            default:
+              throw new Error(
+                `Unknown cache_control action: ${action}. Use: reload, invalidate, stats, misses`
+              );
+          }
+        }
+
+        case "model_info": {
+          const info = {
+            active_profile: profile.name,
+            detected_from: getDetectedFrom(),
+            capabilities: {
+              tool_description_style: profile.toolDescriptionStyle,
+              max_context_chars: profile.maxContextChars,
+              prefer_json: profile.preferJSON,
+              force_explicit_steps: profile.forceExplicitSteps,
+              section_depth: profile.sectionDepth,
+            },
+            available_profiles: getProfileNames(),
+          };
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: adaptResponse(info, profile),
+              },
+            ],
+          };
+        }
+
+        case "git_history": {
+          const input = (args ?? {}) as unknown as GitHistoryInput;
+          if (!input.action) throw new Error("action is required");
+          const projectRoot = path.resolve(SRC_ROOT, "..");
+          const result = handleGitHistory(input, projectRoot);
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: adaptResponse(result, profile),
+              },
+            ],
+          };
+        }
+
+        case "test_runner": {
+          const input = (args ?? {}) as unknown as TestRunnerInput;
+          if (!input.mode) throw new Error("mode is required");
+          const projectRoot = path.resolve(SRC_ROOT, "..");
+          const result = handleTestRunner(input, projectRoot);
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: adaptResponse(result, profile),
+              },
+            ],
+          };
+        }
+
+        case "dep_graph": {
+          const input = (args ?? {}) as unknown as DepGraphInput;
+          if (!input.action) throw new Error("action is required");
+          const result = handleDepGraph(input, SRC_ROOT);
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: adaptResponse(result, profile),
+              },
+            ],
+          };
+        }
+
+        case "symbol_search": {
+          const input = (args ?? {}) as unknown as SymbolSearchInput;
+          if (!input.query) throw new Error("query is required");
+          const result = handleSymbolSearch(input, SRC_ROOT, memoryCache);
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: adaptResponse(result, profile),
+              },
+            ],
+          };
+        }
+
+        case "project_understand": {
+          const input = (args ?? {}) as unknown as ProjectUnderstandInput;
+          if (!input.action) throw new Error("action is required");
+          const projectRoot = path.resolve(SRC_ROOT, "..");
+          const result = handleProjectUnderstand(input, projectRoot, profile, memoryCache);
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: result,
+              },
+            ],
+          };
         }
 
         default:

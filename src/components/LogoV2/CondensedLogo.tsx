@@ -51,8 +51,8 @@ export function CondensedLogo() {
       <Box
         flexDirection="column"
         borderStyle="round"
-        borderColor="claude"
-        borderText={{ content: ` \u2726 Cognitree v${version} `, position: 'top' as const, align: 'start' as const, offset: 1 }}
+        borderColor="#00FF00"
+        borderText={{ content: ` \u2726 Cognitree v${version} `, position: 'top' as const, align: 'center' as const }}
         paddingX={2}
         width={columns}
       >
@@ -63,10 +63,10 @@ export function CondensedLogo() {
 
         {/* Brand */}
         <Box justifyContent="center" marginTop={1}>
-          <Text bold={true} color="claude">{'\u2726\u2726\u2726'} C O G N I T R E E {'\u2726\u2726\u2726'}</Text>
+          <Text bold={true} color="#00FF00">{'\u2726\u2726\u2726'} C O G N I T R E E {'\u2726\u2726\u2726'}</Text>
         </Box>
         <Box justifyContent="center">
-          <Text color="claude">{'\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500'}</Text>
+          <Text color="#00FF00">{'\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500'}</Text>
         </Box>
         <Box justifyContent="center">
           <Text dimColor={true} italic={true}>{'\u{1F331}'} Welcome back! Let's build something amazing.</Text>
@@ -74,24 +74,24 @@ export function CondensedLogo() {
 
         {/* Session Section */}
         <Box marginTop={1}>
-          <Text color="claude" bold={true}>{makeDivider('\u{1F4CB} Session')}</Text>
+          <Text color="#00FF00" bold={true}>{makeDivider('\u{1F4CB} Session')}</Text>
         </Box>
         <Box flexDirection="column" paddingLeft={2}>
-          <Text>  <Text color="claude">{'\u{1F552}'}</Text> <Text dimColor={true}>Time   </Text> <Text>{timeStr}</Text></Text>
-          <Text>  <Text color="claude">{'\u{1F916}'}</Text> <Text dimColor={true}>Model  </Text> <Text bold={true}>{modelDisplayName}{effortSuffix}</Text> <Text dimColor={true}>{'\u00b7'} {billingType}</Text></Text>
-          <Text>  <Text color="claude">{'\u{1F4C2}'}</Text> <Text dimColor={true}>Dir    </Text> <Text>{cwdDisplay}</Text></Text>
-          <Text>  <Text color="claude">{'\u{1F4C4}'}</Text> <Text dimColor={true}>Config </Text> {hasMd ? <Text color="claude">{'\u2713'} CLAUDE.md</Text> : <Text dimColor={true}>{'\u2717'} No CLAUDE.md</Text>}</Text>
+          <Text>  <Text color="#00FF00">{'\u{1F552}'}</Text> <Text dimColor={true}>Time   </Text> <Text>{timeStr}</Text></Text>
+          <Text>  <Text color="#00FF00">{'\u{1F916}'}</Text> <Text dimColor={true}>Model  </Text> <Text bold={true} color="#00FF00">{modelDisplayName}{effortSuffix}</Text> <Text dimColor={true}>{'\u00b7'} {billingType}</Text></Text>
+          <Text>  <Text color="#00FF00">{'\u{1F4C2}'}</Text> <Text dimColor={true}>Dir    </Text> <Text>{cwdDisplay}</Text></Text>
+          <Text>  <Text color="#00FF00">{'\u{1F4C4}'}</Text> <Text dimColor={true}>Config </Text> {hasMd ? <Text color="#00FF00">{'\u2713'} CLAUDE.md</Text> : <Text dimColor={true}>{'\u2717'} No CLAUDE.md</Text>}</Text>
         </Box>
 
         {/* System Section */}
         <Box marginTop={1}>
-          <Text color="claude" bold={true}>{makeDivider('\u{1F5A5}\u{FE0F}  System')}</Text>
+          <Text color="#00FF00" bold={true}>{makeDivider('\u{1F5A5}\u{FE0F}  System')}</Text>
         </Box>
         <Box flexDirection="column" paddingLeft={2} marginBottom={1}>
-          <Text>  <Text color="claude">{'\u26A1'}</Text> <Text dimColor={true}>CPU    </Text> <Text>{sysInfo.cpu}</Text> <Text dimColor={true}>({sysInfo.cpuCores} cores)</Text></Text>
-          <Text>  <Text color="claude">{'\u{1F3AE}'}</Text> <Text dimColor={true}>GPU    </Text> <Text>{sysInfo.gpu}</Text></Text>
-          <Text>  <Text color="claude">{'\u{1F4BE}'}</Text> <Text dimColor={true}>Disk   </Text> <Text>{storageStr}</Text> {storagePercent > 0 && <Text dimColor={true}>({storagePercent}% used)</Text>}</Text>
-          <Text>  <Text color="claude">{'\u{1F310}'}</Text> <Text dimColor={true}>IP     </Text> <Text>{sysInfo.ip}</Text></Text>
+          <Text>  <Text color="#00FF00">{'\u26A1'}</Text> <Text dimColor={true}>CPU    </Text> <Text>{sysInfo.cpu}</Text> <Text dimColor={true}>({sysInfo.cpuCores} cores)</Text></Text>
+          <Text>  <Text color="#00FF00">{'\u{1F3AE}'}</Text> <Text dimColor={true}>GPU    </Text> <Text>{sysInfo.gpu}</Text></Text>
+          <Text>  <Text color="#00FF00">{'\u{1F4BE}'}</Text> <Text dimColor={true}>Disk   </Text> <Text>{storageStr}</Text> {storagePercent > 0 && <Text dimColor={true}>({storagePercent}% used)</Text>}</Text>
+          <Text>  <Text color="#00FF00">{'\u{1F310}'}</Text> <Text dimColor={true}>IP     </Text> <Text>{sysInfo.ip}</Text></Text>
         </Box>
       </Box>
     </OffscreenFreeze>

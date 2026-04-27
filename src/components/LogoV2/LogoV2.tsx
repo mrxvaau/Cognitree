@@ -286,7 +286,7 @@ export function LogoV2() {
     }
     let t13;
     if ($[35] !== modelDisplayName) {
-      t13 = <Text dimColor={true}>{modelDisplayName}</Text>;
+      t13 = <Text bold={true} color="#00FF00">{modelDisplayName}</Text>;
       $[35] = modelDisplayName;
       $[36] = t13;
     } else {
@@ -377,7 +377,7 @@ export function LogoV2() {
   }
   let t20;
   if ($[49] !== modelLine) {
-    t20 = <Text dimColor={true}>{modelLine}</Text>;
+    t20 = <Text bold={true} color="#00FF00">{modelLine}</Text>;
     $[49] = modelLine;
     $[50] = t20;
   } else {

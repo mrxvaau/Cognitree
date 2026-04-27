@@ -14,10 +14,12 @@
 
 import express from "express";
 import { randomUUID } from "node:crypto";
+import * as path from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { createServer, validateSrcRoot, SRC_ROOT } from "./server.js";
+import { MemoryCache } from "./memoryCache.js";
 
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
 const API_KEY = process.env.MCP_API_KEY;
@@ -47,7 +49,7 @@ function authMiddleware(
 // Streamable HTTP transport (modern MCP protocol)
 // ---------------------------------------------------------------------------
 
-async function startStreamableHTTP(app: express.Express): Promise<void> {
+async function startStreamableHTTP(app: express.Express, cache: MemoryCache): Promise<void> {
   // Map of session ID -> transport
   const transports = new Map<string, StreamableHTTPServerTransport>();
 
@@ -58,7 +60,7 @@ async function startStreamableHTTP(app: express.Express): Promise<void> {
 
     if (!transport) {
       // New session
-      const server = createServer();
+      const server = createServer(cache);
       transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
       });
@@ -107,11 +109,11 @@ async function startStreamableHTTP(app: express.Express): Promise<void> {
 // Legacy SSE transport (for older clients)
 // ---------------------------------------------------------------------------
 
-async function startLegacySSE(app: express.Express): Promise<void> {
+async function startLegacySSE(app: express.Express, cache: MemoryCache): Promise<void> {
   const transports = new Map<string, SSEServerTransport>();
 
   app.get("/sse", async (_req, res) => {
-    const server = createServer();
+    const server = createServer(cache);
     const transport = new SSEServerTransport("/messages", res);
     transports.set(transport.sessionId, transport);
     transport.onclose = () => {
@@ -138,6 +140,14 @@ async function startLegacySSE(app: express.Express): Promise<void> {
 async function main(): Promise<void> {
   await validateSrcRoot();
 
+  // Initialize shared memory cache
+  const cache = new MemoryCache();
+  const memoryFilePath = path.resolve(
+    process.env.MCP_MEMORY_FILE ??
+      path.join(SRC_ROOT, "..", "CODEBASE.md")
+  );
+  await cache.load(memoryFilePath);
+
   const app = express();
   app.use(express.json());
   app.use(authMiddleware);
@@ -153,8 +163,8 @@ async function main(): Promise<void> {
   });
 
   // Register both transports
-  await startStreamableHTTP(app);
-  await startLegacySSE(app);
+  await startStreamableHTTP(app, cache);
+  await startLegacySSE(app, cache);
 
   app.listen(PORT, () => {
     console.log(`Claude Code Explorer MCP (HTTP) listening on port ${PORT}`);

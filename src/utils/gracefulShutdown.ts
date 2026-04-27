@@ -43,6 +43,9 @@ import { isEnvTruthy } from './envUtils.js'
 import { getCurrentSessionTitle, sessionIdExists } from './sessionStorage.js'
 import { sleep } from './sleep.js'
 import { profileReport } from './startupProfiler.js'
+import { isCognitreeProject } from '../cognitree/startup.js'
+import { createCheckpoint } from '../cognitree/checkpoint.js'
+import { regenerateInjectMd } from '../cognitree/inject.js'
 
 /**
  * Clean up terminal modes synchronously before process exit.
@@ -441,6 +444,21 @@ export async function gracefulShutdown(
   // flush — which can take several seconds.
   cleanupTerminalModes()
   printResumeHint()
+
+  // Cognitree: auto-checkpoint on session end
+  // Must be sync and wrapped in try/catch — never blocks shutdown
+  try {
+    const { getCwd } = await import('./cwd.js')
+    const cwd = getCwd()
+    if (isCognitreeProject(cwd)) {
+      const path = await import('path')
+      const cognitreeDir = path.join(cwd, '.cognitree')
+      createCheckpoint({ cognitreeDir, projectDir: cwd, prompt: 'Session ended' })
+      regenerateInjectMd(cwd)
+    }
+  } catch {
+    // Cognitree auto-checkpoint failed silently — never block shutdown
+  }
 
   // Flush session data first — this is the most critical cleanup. If the
   // terminal is dead (SIGHUP, SSH disconnect), hooks and analytics may hang

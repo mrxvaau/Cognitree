@@ -439,3 +439,509 @@ bun run check     # lint + typecheck
 - **No eval():** Tool inputs are validated via Zod schemas, never eval'd
 - **MCP authentication:** OAuth-based MCP server connections with approval flow
 - **Sub-agent isolation:** Sub-agents get a filtered tool set (no Agent tool, no TaskOutput)
+
+---
+
+## DEEP MAP
+
+> Real line numbers from actual source. Updated 2026-04-25.
+
+### TASK 1 — FUNCTION MAP: CORE FILES
+
+#### `src/query.ts` (1731 lines)
+
+| Line | Name | Type | Params | Returns | What it does |
+|------|------|------|--------|---------|--------------|
+| 123 | `yieldMissingToolResultBlocks` | generator | `assistantMessages, errorMessage` | `UserMessage[]` | Emits error tool_result blocks for interrupted tool_use requests |
+| 175 | `isWithheldMaxOutputTokens` | function | `msg: Message \| StreamEvent` | `boolean` | Guards max_output_tokens error from leaking to SDK callers during recovery |
+| 181 | `QueryParams` | type | — | — | Input params: messages, systemPrompt, userContext, canUseTool, fallbackModel, querySource, taskBudget |
+| 204 | `State` | type | — | — | Mutable cross-iteration state: messages, toolUseContext, turnCount, transition, autoCompactTracking |
+| 219 | `query` | async generator | `params: QueryParams` | `AsyncGenerator<StreamEvent \| Message, Terminal>` | **Main entry** — wraps queryLoop, notifies command lifecycle on completion |
+| 241 | `queryLoop` | async generator | `params, consumedCommandUuids` | `AsyncGenerator<StreamEvent \| Message, Terminal>` | **Core agent loop** — while(true): build prompt → call model → run tools → compact → continue |
+| 307 | `while (true)` | loop body | — | — | Each iteration: destructure state → skill prefetch → microcompact → autocompact → call model → stream → handle tools → handle stop/continue |
+
+#### `src/QueryEngine.ts` (1298 lines)
+
+| Line | Name | Type | Params | Returns | What it does |
+|------|------|------|--------|---------|--------------|
+| 1–83 | imports | — | — | — | Pulls query, cost-tracker, analytics, model, fileHistory, permissions, sessionStorage |
+| 85–99 | lazy imports | — | — | — | MessageSelector (React/Ink), SDK mappers, scratchpad |
+| ~120 | `QueryEngine` class | class | — | — | Turn lifecycle manager: processUserInput → query() → drain → yield SDK messages |
+
+#### `src/Tool.ts` (795 lines)
+
+| Line | Name | Type | What it does |
+|------|------|------|--------------|
+| 15 | `ToolInputJSONSchema` | type | JSON Schema shape for tool input (type: 'object', properties) |
+| 64–73 | progress re-exports | types | Re-exports AgentToolProgress, BashProgress, MCPProgress etc. for compat |
+| 90 | `QueryChainTracking` | type | `{ chainId, depth }` — tracks agent chain for analytics |
+| 95 | `ValidationResult` | type | Tool execution validation — `{ result: true }` or `{ result: false, message, errorCode }` |
+| ~150 | `ToolUseContext` | type | Runtime context passed to tool.call(): messages, options, permissions, abortController, agentId |
+| ~300 | `Tool` | interface | Core contract: name, inputSchema, call(), prompt(), checkPermissions(), isReadOnly(), isConcurrencySafe() |
+| ~400 | `buildTool` | function | Factory — creates a Tool with safe defaults from a partial spec |
+| ~700 | `findToolByName` | function | Lookup by name string → Tool instance (used by query loop) |
+
+#### `src/tools.ts` (373 lines)
+
+| Line | Name | Type | What it does |
+|------|------|------|--------------|
+| 1–53 | imports + DCE | — | Static imports (BashTool, FileEditTool…) + dead-code-eliminated feature-gated tools (REPL, Sleep, Cron, Monitor) |
+| 54–100 | more imports | — | TaskOutputTool, WebSearchTool, TodoWriteTool, GrepTool, TeamCreate/Delete, LSP, MCP, ToolSearch, Config, Task* |
+| ~110 | `getTools` | function | Assembles the full `Tools[]` array from all tool classes, filtered by feature gates and environment |
+| ~200 | `filterToolsByBaseList` | function | Applies --tools CLI filter to restrict available tools |
+
+#### `src/commands.ts` (~700 lines)
+
+| Line | Name | Type | What it does |
+|------|------|------|--------------|
+| ~1 | imports | — | Command types, slash-command definitions |
+| ~50 | `getCommands` | function | Returns all registered slash commands: /compact, /security-review, /init, /resume, etc. |
+| ~100 | `getSlashCommandToolSkills` | function | Returns skill-based commands as pseudo-tools |
+| ~200 | `filterCommandsForRemoteMode` | function | Strips commands unavailable in remote/bridge mode |
+
+#### `src/services/api/client.ts` (~255 lines)
+
+| Line | Name | Type | What it does |
+|------|------|------|--------------|
+| ~1 | imports | — | Anthropic SDK, LLMClient, provider detection, env utils |
+| ~37 | `DEFAULT_MODEL` | const | Fallback model: `claude-sonnet-4-20250514` |
+| ~50 | `getAnthropicClient` | function | **Multi-path client factory**: Path A (Anthropic SDK), Path B (Generic LLMClient), Path C (Qwen OAuth) |
+| ~100 | Path A branch | code | Direct Anthropic SDK — uses ANTHROPIC_API_KEY, handles streaming natively |
+| ~150 | Path B branch | code | Generic OpenAI-compatible — creates LLMClient with LLM_BASE_URL + LLM_API_KEY |
+| ~200 | Path C branch | code | Qwen OAuth device flow — refreshes access token, creates LLMClient with DashScope endpoint |
+
+#### `src/utils/model/modelProfile.ts` (316 lines)
+
+| Line | Name | Type | What it does |
+|------|------|------|--------------|
+| 10 | `ModelProfile` | interface | Shape: capabilities (toolCalling, multiAgent, thinking, streaming, maxContextTokens), tokenBudget (maxAgentSpawns, compactOutput), quirks (sanitizeFunctionNames, disableThinking, forceToolUse, toolNameMaxLength) |
+| 48 | `CLAUDE_PROFILE` | const | Multi-agent ✅, thinking ✅, 200K ctx, 10 spawns, no quirks |
+| 69 | `QWEN_PROFILE` | const | Multi-agent ❌, thinking ❌, 128K ctx, 3 spawns, forceToolUse ✅ |
+| 90 | `GPT_PROFILE` | const | Multi-agent ❌, thinking ❌, 128K ctx, 3 spawns |
+| 111 | `GEMINI_PROFILE` | const | Multi-agent ❌, thinking ✅, 1M ctx, 3 spawns, sanitizeFunctionNames ✅ |
+| 132 | `DEEPSEEK_PROFILE` | const | Multi-agent ❌, thinking ✅, 128K ctx, 3 spawns, forceToolUse ✅ |
+| 153 | `LLAMA_PROFILE` | const | Multi-agent ❌, thinking ❌, 128K ctx, 2 spawns, forceToolUse ✅ |
+| 174 | `MISTRAL_PROFILE` | const | Multi-agent ❌, thinking ❌, 128K ctx, 3 spawns |
+| 196 | `DEFAULT_PROFILE` | const | Safe fallback — multi-agent ❌, thinking ❌, forceToolUse ✅ |
+| 223 | `PROFILE_MATCHERS` | const | Ordered `[pattern, profile][]` — first match wins. claude→Claude, qwen→Qwen, gpt-4→GPT, etc. |
+| 250 | `matchModelProfile` | function | Case-insensitive substring match → profile. Unknown → DEFAULT |
+| 269 | `loadModelProfile` | function | Load + cache from model name or env (`LLM_MODEL` / `ANTHROPIC_MODEL`) |
+| 289 | `getActiveProfile` | function | Returns cached profile, or loads from env |
+| 298 | `supportsMultiAgent` | function | Shorthand: `getActiveProfile().capabilities.multiAgent` |
+| 305 | `getMaxAgentSpawns` | function | Shorthand: `getActiveProfile().tokenBudget.maxAgentSpawns` |
+| 312 | `resetProfileCache` | function | Clear cached profile (testing, model switching) |
+
+#### `src/constants/prompts.ts` (988 lines)
+
+| Line | Name | Type | What it does |
+|------|------|------|--------------|
+| 445 | `getSystemPrompt` | async function | **Main prompt builder** — branches on CLAUDE_CODE_SIMPLE env var |
+| 451–525 | Universal BYOK branch | code block | `if (isEnvTruthy(CLAUDE_CODE_SIMPLE))` — builds the model-agnostic prompt with profile-aware sections |
+| 457 | `loadModelProfile(model)` | call | Loads profile inside the universal branch |
+| 460–471 | profile-aware sections | code | Builds `toolUseRule` (forceToolUse), `agentRule` (multiAgent), `spawnRule` (!multiAgent) from profile |
+| 473–523 | universal prompt template | string | Plan→Execute→Verify workflow, tool priority table, code quality rules, token efficiency rules, safety, output format |
+| 505–511 | Token Efficiency block | string | MANDATORY rules: no filler, read once, lead with answer, no redundant tools |
+| 528–648 | Anthropic prompt path | code | Full prompt for Claude: dynamic sections via `systemPromptSection()` registry — session_guidance, memory, env_info, language, output_style, MCP, scratchpad, FRC, summarize, numeric_length_anchors, token_budget, brief |
+| 651 | `getMcpInstructions` | function | Build MCP server instructions section for system prompt |
+
+---
+
+### TASK 2 — DEEP MAP OF `main.tsx`
+
+**`src/main.tsx` — 4717 lines total**
+
+#### Section Map
+
+| Line Range | Section | What lives here |
+|------------|---------|-----------------|
+| 1–8 | Side-effect comments | Startup ordering documentation |
+| 9–21 | Side-effect imports | `profileCheckpoint`, `startMdmRawRead`, `startKeychainPrefetch` — run before heavy imports |
+| 22–206 | Static imports | ~185 lines of imports: commander, chalk, React, OAuth, services, tools, utils, bootstrap state, migrations |
+| 207–209 | `profileCheckpoint('main_tsx_imports_loaded')` | Marks end of import evaluation |
+| 216–229 | `logManagedSettings()` | Analytics: log policy settings keys to Statsig |
+| 230–265 | `isBeingDebugged()` | Security: detect Node/Bun inspect mode → exit(1) for external builds |
+| 270–290 | `logSessionTelemetry()` | Per-session skill/plugin telemetry |
+| 295–310 | `getCertEnvVarTelemetry()` | Detect TLS cert env vars for telemetry |
+| 315–360 | `logStartupTelemetry()` | Async: log git status, worktree count, sandbox state |
+| 365–400 | `runMigrations()` | 11 sequential migrations: model renames, settings schema, opus defaults |
+| 405–440 | `prefetchSystemContextIfSafe()` | Only prefetch git context after trust is established |
+| 445–490 | `startDeferredPrefetches()` | **Post-first-render**: initUser, getUserContext, tips, AWS/GCP creds, analytics gates, change detectors |
+| 495–530 | `loadSettingsFromFlag()` | Parse `--settings <json-or-path>`, validate, write temp file |
+| 535–555 | `loadSettingSourcesFromFlag()` | Parse `--setting-sources` flag |
+| 560–580 | `eagerLoadSettings()` | Pre-init settings parsing from argv |
+| 585–610 | `initializeEntrypoint()` | Set `CLAUDE_CODE_ENTRYPOINT` env: cli, sdk-cli, mcp, github-action |
+| 615–660 | `PendingConnect` / `PendingAssistantChat` / `PendingSSH` | Types + state for early-argv URL/SSH/assistant rewriting |
+| 665–1000 | `main()` | **Entrypoint**: security (Windows PATH hijack), warning handler, SIGINT, cc:// URL rewriting, assistant/SSH argv rewriting, client type detection, settings loading, → `run()` |
+| 1000–1100 | `getInputPrompt()` | stdin handling: detect TTY, stream-json mode, 3s timeout warning |
+| 1100–1200 | `run()` start | Commander setup, sorted help config, profiling |
+| 1200–1400 | Commander options | All ~40 CLI flags: `-p`, `--model`, `--permission-mode`, `--mcp-config`, `--system-prompt`, `--resume`, `--worktree`, `--agents`, etc. |
+| 1400–2200 | `.action()` handler | **Heart of startup**: bare mode → Kairos check → permission resolution → MCP config parsing → tool permission context → file downloads → system prompt → agent definitions → initial state → resume handling |
+| 2200–2600 | Interactive startup | `showSetupScreens()` → trust dialog → remote control → worktree → MCP connections → claudeai MCP → hooks → LSP → session start |
+| 2600–3000 | REPL launch | `launchRepl()` with full initial state: messages, tools, commands, MCP clients, model, theme, permissions |
+| 3000–3300 | Headless path | `runHeadless()`: print mode (-p) with structured output, task budget, max turns |
+| 3300–3600 | SSH remote | SSH session lifecycle: probe → deploy → connect → bidirectional I/O |
+| 3600–3800 | Teleport | Remote session: checkout branch → validate repo → resume |
+| 3800–4200 | Subcommands | `mcp serve/list/add/remove`, `auth login/logout/status`, `plugin install/uninstall/enable/disable/update`, `doctor`, `update`, `log`, `export`, `task create/list/get/update` |
+| 4200–4400 | More subcommands | `completion`, `config`, `agents` |
+| 4400–4545 | `run()` tail | `profileReport()`, return program |
+| 4546–4642 | `logTenguInit()` | Analytics: comprehensive session start event |
+| 4643–4653 | `maybeActivateProactive()` | Enable proactive mode from flag/env |
+| 4654–4684 | `maybeActivateBrief()` | Enable brief mode: entitlement check → setUserMsgOptIn |
+| 4685–4688 | `resetCursor()` | Restore terminal cursor on exit |
+| 4689–4715 | `extractTeammateOptions()` | Parse `--agent-id`, `--agent-name`, `--team-name`, `--teammate-mode` for swarm agents |
+
+---
+
+### TASK 3 — QUERY LOOP STATE MACHINE
+
+```
+                         ┌──────────┐
+                         │ ENTRY    │  query() L:219
+                         │ (yield*) │
+                         └────┬─────┘
+                              │
+                    ┌─────────▼──────────┐
+                    │  queryLoop() L:241  │
+                    │  init State {}      │
+                    └─────────┬──────────┘
+                              │
+              ┌───────────────▼────────────────┐
+              │         while(true) L:307       │
+              │                                 │
+              │  1. Destructure state           │
+              │  2. Skill prefetch              │
+              │  3. yield stream_request_start  │
+              │  4. Apply tool result budget    │
+              │  5. Snip compact (HISTORY_SNIP) │
+              │  6. Microcompact                │
+              │  7. Context collapse            │
+              │  8. Auto-compact                │
+              │  9. Build system prompt         │
+              │ 10. callModel() → SSE stream    │
+              │ 11. Parse chunks → messages     │
+              │ 12. yield assistant message      │
+              └───────────────┬────────────────┘
+                              │
+              ┌───────────────▼────────────────┐
+              │  Tool dispatch decision         │
+              │                                 │
+              │  Has tool_use blocks?           │
+              │  ├─ YES → runTools()            │
+              │  │   ├─ Permission check        │
+              │  │   ├─ tool.call()             │
+              │  │   ├─ yield tool results      │
+              │  │   └─ state = { ...continue } │
+              │  │                               │
+              │  └─ NO → handleStopHooks()      │
+              │       ├─ stop_reason=end_turn    │
+              │       ├─ yield final message     │
+              │       └─ return Terminal         │
+              └────────────────────────────────┘
+
+  Continue transitions (state.transition):
+    • tool_use_result   — normal: tools ran, continue loop
+    • max_output_tokens — recovery: increment count, extend budget
+    • reactive_compact  — context too long: compact + retry
+    • prompt_too_long   — emergency: aggressive compact + retry
+    • token_budget      — +500k auto-continue
+    • command_queue     — slash command injected mid-turn
+```
+
+---
+
+### TASK 4 — MODEL PROFILE INTEGRATION MAP
+
+```
+  Boot (main.tsx)
+    │
+    ▼
+  getSystemPrompt() ──── prompts.ts:445
+    │
+    ├── if CLAUDE_CODE_SIMPLE ──→ loadModelProfile(model) ── modelProfile.ts:269
+    │       │
+    │       ├── profile.quirks.forceToolUse → inject "MUST use tools" rule
+    │       ├── profile.capabilities.multiAgent → inject Agent tool row / spawn rule
+    │       └── profile.tokenBudget.compactOutput → "Token Efficiency (MANDATORY)" block
+    │
+    └── else (Anthropic path) → full prompt, no profile needed
+    │
+    ▼
+  AgentTool.call() ──── AgentTool.tsx:~251
+    │
+    ├── loadModelProfile() ── check multiAgent
+    │       ├── false → throw "Model profile disables multi-agent"
+    │       └── true  → continue to spawn
+    │
+    ▼
+  client.ts:getAnthropicClient() ──── client.ts:~50
+    │
+    ├── Path A (Anthropic) → SDK direct, profile not consulted
+    ├── Path B (Generic)   → LLMClient, profile.quirks applied:
+    │       ├── sanitizeFunctionNames → clean tool names
+    │       ├── toolNameMaxLength → truncate names
+    │       └── disableThinking → strip thinking params
+    └── Path C (Qwen OAuth) → same as Path B + token refresh
+```
+
+---
+
+## PATCH MAP
+
+> Audit date: 2026-04-25 — covers test coverage, keybindings, and hooks system.
+
+---
+
+### PM-1 — TEST COVERAGE
+
+| Test File | Tests What Module | Functions/Behaviors Covered | Missing Coverage |
+|-----------|-------------------|----------------------------|------------------|
+| `tests/integration/api.test.ts` | `src/services/api/client.ts` | Anthropic client instantiation, model override via env, streaming happy path | Path B (Generic LLMClient), Path C (Qwen OAuth), error retry, rate-limit backoff |
+| `tests/integration/mcp.test.ts` | `src/services/mcp/` | MCP client↔server roundtrip via in-memory transport, tool listing, tool call | Auth-gated MCP, reconnection, multi-server, timeout |
+| `tests/integration/query.test.ts` | `src/query.ts` | `query()` happy path, tool dispatch, assistant message yield | Error recovery, timeout, compaction triggers, max_output_tokens recovery, reactive compact |
+| `tests/smoke/commands.test.ts` | `src/commands.ts` | Command registry import, command count assertion, all commands have name+description | Command execution, argument parsing, handler side-effects |
+| `tests/smoke/context.test.ts` | `src/utils/` (git/cwd) | `getCwd()`, `getGitStatus()` existence, env-skip in CI | Deep git context, worktree detection, nested repos |
+| `tests/smoke/prompt.test.ts` | `src/constants/prompts.ts` | `getSystemPrompt()` returns non-empty string, contains tool names subset | Profile-aware prompt branches, BYOK vs Anthropic, model profile injection |
+| `tests/smoke/tools.test.ts` | `src/tools.ts` | `getTools()` returns array, each tool has `name`+`inputSchema`+`call` | Tool execution, permission checks, concurrency safety, result size limits |
+| `tests/shims/bun-bundle.test.ts` | `bun:bundle` shim | `feature()` returns boolean, feature flag names resolve | Dead-code elimination, tree-shaking correctness |
+| `tests/shims/macro.test.ts` | `bun:macros` shim | Global constant shims (`__PACKAGE_VERSION__`, etc.) | Macro expansion at build time |
+| `tests/setup.ts` | (global) | Sets `ANTHROPIC_API_KEY` dummy for module loading, vitest env | — |
+
+#### Top 5 Untested Critical Paths
+
+1. **`src/utils/hooks.ts`** (5024 lines) — Hook execution, shell spawning, JSON output parsing, trust gating. An RCE vector if broken.
+2. **`src/services/api/llmClient.ts`** — Generic LLM streaming, SSE chunk parsing, tool call accumulation. Every BYOK user depends on this.
+3. **`src/utils/permissions/`** — Permission rule evaluation, sandbox enforcement. Security-critical; no unit tests.
+4. **`src/services/compact/`** — Auto-compaction, context window management. Silent data loss if buggy.
+5. **`src/main.tsx`** (4717 lines) — REPL orchestrator. Startup sequence, migration, flag parsing. Untestable monolith risk.
+
+#### Modules With NO Test File
+
+| Module | Risk |
+|--------|------|
+| `src/utils/hooks.ts` | 159KB hook orchestrator — shell exec, JSON validation, trust checks. **Critical RCE surface.** |
+| `src/services/api/llmClient.ts` | Generic SSE streaming client for all BYOK providers. Silent failures break every non-Anthropic user. |
+| `src/main.tsx` | 4717-line monolith. CLI flag parsing, migrations, startup — regressions are invisible until runtime. |
+| `src/utils/model/modelProfile.ts` | Profile matching drives agent behavior. Wrong match → wrong capabilities → broken tool dispatch. |
+| `src/constants/prompts.ts` | System prompt builder. Profile-aware branching untested → models get wrong instructions. |
+| `src/keybindings/` | Keybinding resolver, chord interceptor. Failures = dead keyboard in TUI. |
+| `src/utils/config.ts` | Settings resolution across user/project/policy scopes. Misconfiguration = security bypass. |
+| `src/services/compact/` | Compaction engine. Bugs silently destroy conversation history mid-session. |
+
+---
+
+### PM-2 — KEYBINDINGS MAP
+
+Source: `src/keybindings/defaultBindings.ts` (342 lines)
+
+#### Global Context (always active)
+
+| Key | Modifier | Action | Notes |
+|-----|----------|--------|-------|
+| `c` | `ctrl` | `app:interrupt` | Reserved — double-press exits. Cannot be rebound. |
+| `d` | `ctrl` | `app:exit` | Reserved — double-press exits. Cannot be rebound. |
+| `l` | `ctrl` | `app:redraw` | Redraws TUI |
+| `t` | `ctrl` | `app:toggleTodos` | Todo panel toggle |
+| `o` | `ctrl` | `app:toggleTranscript` | Transcript viewer toggle |
+| `b` | `ctrl+shift` | `app:toggleBrief` | Feature-gated: `KAIROS`/`KAIROS_BRIEF` |
+| `o` | `ctrl+shift` | `app:toggleTeammatePreview` | Teammate preview panel |
+| `r` | `ctrl` | `history:search` | Enter history search mode |
+| `f` | `ctrl+shift` / `cmd+shift` | `app:globalSearch` | Feature-gated: `QUICK_SEARCH` |
+| `p` | `ctrl+shift` / `cmd+shift` | `app:quickOpen` | Feature-gated: `QUICK_SEARCH` |
+| `j` | `meta` | `app:toggleTerminal` | Feature-gated: `TERMINAL_PANEL` |
+
+#### Chat Context (prompt input active)
+
+| Key | Modifier | Action | Notes |
+|-----|----------|--------|-------|
+| `escape` | — | `chat:cancel` | Cancel current operation |
+| `k` | `ctrl+x ctrl` | `chat:killAgents` | Chord: kill all sub-agents |
+| `tab` | `shift` | `chat:cycleMode` | Windows fallback: `meta+m` if no VT mode |
+| `p` | `meta` | `chat:modelPicker` | Open model picker |
+| `o` | `meta` | `chat:fastMode` | Toggle fast mode |
+| `t` | `meta` | `chat:thinkingToggle` | Toggle thinking |
+| `enter` | — | `chat:submit` | Submit prompt |
+| `up` / `down` | — | `history:previous/next` | History navigation |
+| `_` | `ctrl` / `ctrl+shift+-` | `chat:undo` | Undo (dual binding for terminal compat) |
+| `e` | `ctrl+x ctrl` | `chat:externalEditor` | Chord: open $EDITOR |
+| `g` | `ctrl` | `chat:externalEditor` | Alt binding for external editor |
+| `s` | `ctrl` | `chat:stash` | Stash current input |
+| `v` | `alt` (Win) / `ctrl` (other) | `chat:imagePaste` | Platform-specific image paste |
+| `up` | `shift` | `chat:messageActions` | Feature-gated: `MESSAGE_ACTIONS` |
+| `space` | — | `voice:pushToTalk` | Feature-gated: `VOICE_MODE` |
+
+#### Other Contexts
+
+| Context | Key | Action |
+|---------|-----|--------|
+| **Autocomplete** | `tab` | `autocomplete:accept` |
+| | `escape` | `autocomplete:dismiss` |
+| | `up`/`down` | `autocomplete:previous/next` |
+| **Settings** | `j`/`k`/`ctrl+n`/`ctrl+p`/`up`/`down` | `select:previous/next` |
+| | `space` | `select:accept` (toggle) |
+| | `enter` | `settings:close` (save) |
+| | `/` | `settings:search` |
+| | `r` | `settings:retry` |
+| **Confirmation** | `y`/`enter` | `confirm:yes` |
+| | `n`/`escape` | `confirm:no` |
+| | `shift+tab` | `confirm:cycleMode` |
+| | `ctrl+e` | `confirm:toggleExplanation` |
+| | `ctrl+d` | `permission:toggleDebug` |
+| **Transcript** | `ctrl+e` | `transcript:toggleShowAll` |
+| | `q`/`escape`/`ctrl+c` | `transcript:exit` |
+| **HistorySearch** | `ctrl+r` | `historySearch:next` |
+| | `escape`/`tab` | `historySearch:accept` |
+| | `enter` | `historySearch:execute` |
+| **Task** | `ctrl+b` | `task:background` |
+| **Scroll** | `pageup`/`pagedown` | `scroll:pageUp/pageDown` |
+| | `wheelup`/`wheeldown` | `scroll:lineUp/lineDown` |
+| | `ctrl+home`/`ctrl+end` | `scroll:top/bottom` |
+| | `ctrl+shift+c`/`cmd+c` | `selection:copy` |
+| **DiffDialog** | `left`/`right` | `diff:previousSource/nextSource` |
+| | `up`/`down` | `diff:previousFile/nextFile` |
+| | `enter` | `diff:viewDetails` |
+| **Select** | `j`/`k`/`up`/`down`/`ctrl+n`/`ctrl+p` | `select:next/previous` |
+| | `enter` | `select:accept` |
+| | `escape` | `select:cancel` |
+| **Plugin** | `space` | `plugin:toggle` |
+| | `i` | `plugin:install` |
+
+#### Platform Notes
+- **Windows VT mode**: `shift+tab` requires Bun ≥1.2.23 or Node ≥22.17.0. Falls back to `meta+m`.
+- **Image paste**: `alt+v` on Windows (avoids system `ctrl+v`), `ctrl+v` elsewhere.
+- **Kitty protocol**: `cmd+shift+f/p` and `cmd+c` only work on kitty-protocol terminals.
+
+---
+
+### PM-3 — HOOKS SYSTEM INVENTORY
+
+Source: `src/utils/hooks.ts` (5024 lines, 159KB) + `src/types/hooks.ts` + `src/entrypoints/sdk/coreTypes.ts`
+
+#### Hook Events (26 total)
+
+| Hook Event | Match Query | Executor Function | Execution Path | Blockable |
+|------------|-------------|-------------------|----------------|-----------|
+| `PreToolUse` | `tool_name` | `executePreToolHooks()` | REPL (generator) | ✅ exit=2 |
+| `PostToolUse` | `tool_name` | `executePostToolHooks()` | REPL (generator) | ✅ |
+| `PostToolUseFailure` | `tool_name` | `executePostToolUseFailureHooks()` | REPL (generator) | ✅ |
+| `PermissionRequest` | `tool_name` | `executePermissionRequestHooks()` | REPL (generator) | ✅ |
+| `PermissionDenied` | `tool_name` | `executePermissionDeniedHooks()` | REPL (generator) | — |
+| `UserPromptSubmit` | — | `executeUserPromptSubmitHooks()` | REPL (generator) | ✅ |
+| `SessionStart` | `source` | `executeSessionStartHooks()` | REPL (generator) | — |
+| `SessionEnd` | `reason` | `executeSessionEndHooks()` | Outside REPL | — |
+| `Stop` | — | `executeStopHooks()` | REPL (generator) | ✅ |
+| `StopFailure` | `error` | `executeStopFailureHooks()` | Outside REPL | — |
+| `SubagentStart` | `agent_type` | `executeSubagentStartHooks()` | REPL (generator) | — |
+| `SubagentStop` | `agent_type` | `executeStopHooks()` (subagent) | REPL (generator) | ✅ |
+| `PreCompact` | `trigger` | `executePreCompactHooks()` | Outside REPL | — |
+| `PostCompact` | `trigger` | `executePostCompactHooks()` | Outside REPL | — |
+| `Notification` | `notification_type` | `executeNotificationHooks()` | Outside REPL | — |
+| `TeammateIdle` | — | `executeTeammateIdleHooks()` | REPL (generator) | ✅ |
+| `TaskCreated` | — | `executeTaskCreatedHooks()` | REPL (generator) | ✅ |
+| `TaskCompleted` | — | `executeTaskCompletedHooks()` | REPL (generator) | ✅ |
+| `Elicitation` | `mcp_server_name` | `executeElicitationHooks()` | Outside REPL | ✅ |
+| `ElicitationResult` | `mcp_server_name` | `executeElicitationResultHooks()` | Outside REPL | ✅ |
+| `ConfigChange` | `source` | `executeConfigChangeHooks()` | Outside REPL | ✅* |
+| `CwdChanged` | — | `executeCwdChangedHooks()` | Outside REPL | — |
+| `FileChanged` | `basename(file_path)` | `executeFileChangedHooks()` | Outside REPL | — |
+| `InstructionsLoaded` | `load_reason` | `executeInstructionsLoadedHooks()` | Outside REPL | — |
+| `WorktreeCreate` | — | `executeWorktreeCreateHook()` | Outside REPL | — |
+| `WorktreeRemove` | — | `executeWorktreeRemoveHook()` | Outside REPL | — |
+
+\* `ConfigChange` with `source=policy_settings` forces `blocked=false` (enterprise policy cannot be blocked).
+
+#### Hook Types (6 types)
+
+| Type | Defined In | Execution | Notes |
+|------|-----------|-----------|-------|
+| `command` | `settings.json` | `execCommandHook()` — spawns shell process | Default shell: bash. Configurable via `hook.shell`. |
+| `prompt` | `settings.json` | `execPromptHook()` — injects into model context | Requires `ToolUseContext`. |
+| `agent` | `settings.json` | `execAgentHook()` — spawns sub-agent | Requires `ToolUseContext` + `messages`. |
+| `http` | `settings.json` | `execHttpHook()` — HTTP POST with JSON body | Own timeout via `DEFAULT_HTTP_HOOK_TIMEOUT_MS`. |
+| `callback` | Code (SDK) | Direct function call | Internal use: sessionFileAccessHooks, attributionHooks. Fastest path. |
+| `function` | Session storage | `executeFunctionHook()` — callback with messages | Stop hooks only. Requires messages array. |
+
+#### Registration Mechanisms
+
+| Source | How Registered | Lookup |
+|--------|---------------|--------|
+| `settings.json` (user/project/policy) | Parsed at boot via `getHooksConfigFromSnapshot()` | `getHooksConfig()` merges snapshot + registered + session |
+| Plugins | `loadPluginHooks.ts` → `registerHookCallbacks()` | Stored in `STATE.registeredHooks` (bootstrap/state.ts) |
+| SDK callbacks | `registerHookCallbacks()` directly | Same `STATE.registeredHooks` map |
+| Session hooks | `getSessionHooks()` / `getSessionFunctionHooks()` | `sessionHooks.ts` — per-session, per-agent-id scoped |
+
+#### Execution Lifecycle
+
+```
+1. Guard checks:
+   ├── shouldDisableAllHooksIncludingManaged() → skip all
+   ├── CLAUDE_CODE_SIMPLE env → skip all
+   └── shouldSkipHookDueToTrust() → skip (security: workspace trust)
+
+2. Hook resolution:
+   ├── getHooksConfig() → merges settings + registered + session hooks
+   ├── matchesPattern(matchQuery, matcher) → glob/regex filter
+   ├── Deduplication by type (command/prompt/agent/http via Map)
+   ├── `if` condition filter → prepareIfConditionMatcher()
+   └── HTTP hooks blocked for SessionStart/Setup events
+
+3. Execution (parallel via AsyncGenerator):
+   ├── callback → direct invocation (fast path, no spawn)
+   ├── function → callback with messages array
+   ├── command → execCommandHook() → spawn shell → parse JSON output
+   ├── prompt → execPromptHook() → inject into model context
+   ├── agent → execAgentHook() → spawn sub-agent
+   └── http → execHttpHook() → HTTP POST → parse JSON response
+
+4. Output processing:
+   ├── parseHookOutput() → Zod validation via hookJSONOutputSchema
+   ├── processHookJSONOutput() → extract decision, systemMessage, hookSpecificOutput
+   ├── Exit code 0 → success
+   ├── Exit code 2 → blocking error (tool blocked)
+   └── Other non-zero → non-blocking error (logged, not fatal)
+
+5. Result aggregation:
+   ├── Permission precedence: deny > ask > allow > passthrough
+   ├── Collect: additionalContext, watchPaths, updatedInput, updatedMCPToolOutput
+   ├── Analytics: tengu_run_hook / tengu_repl_hook_finished
+   └── OTEL tracing: hook_execution_start / hook_execution_complete
+```
+
+#### Key Constants
+
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `TOOL_HOOK_EXECUTION_TIMEOUT_MS` | 600,000 (10 min) | Default per-hook timeout |
+| `SESSION_END_HOOK_TIMEOUT_MS_DEFAULT` | 1,500 (1.5s) | SessionEnd hook timeout (tight for shutdown) |
+| `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` | env override | User-configurable SessionEnd timeout |
+
+#### Custom Hook Example (settings.json)
+
+```jsonc
+// Log every Bash tool invocation to a file
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"$(date): tool=$HOOK_TOOL_NAME input=$HOOK_INPUT\" >> /tmp/claude-hooks.log"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Hook receives JSON on stdin with fields: `hook_event_name`, `tool_name`, `tool_input`, `session_id`, `cwd`, `transcript_path`.
+Exit 0 = allow, exit 2 = block (with stderr as reason), JSON stdout = structured response via `hookJSONOutputSchema`.
+
+#### Security Model
+
+- **All hooks require workspace trust** — `shouldSkipHookDueToTrust()` gates every execution path.
+- **Managed-only mode** — `shouldAllowManagedHooksOnly()` restricts to policy settings when `disableAllHooks` is set.
+- **Plugin isolation** — plugin hooks run with `CLAUDE_PLUGIN_OPTION_*` env vars; data dir via `getPluginDataDir()`.
+- **No eval** — hook output validated through Zod schema (`hookJSONOutputSchema`), never evaluated.
+- **Policy override** — `ConfigChange` with `source=policy_settings` cannot be blocked by hooks.

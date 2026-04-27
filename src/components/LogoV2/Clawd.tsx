@@ -74,21 +74,16 @@ export function Clawd(t0) {
   const $ = _c(26);
   let t12;
   if ($[23] === Symbol.for("react.memo_cache_sentinel")) {
-    t12 = <Box flexDirection="column"><Text color="#10b981" bold={true}>{`                '.,
-                  'b      *
-                   '$    #.
-                    $:   #:
-                    *#  @):
-                    :@,@):   ,.**:'
-          ,         :@@*: ..**'
-           '#o.    .:(@'.@*"'
-              'bq,..:,@@*'   ,*
-              ,p$q8,:@)'  .p*'
-             '    '@@Pp@@*'
-                   Y7'.'
-                  :@):.
-                 .:@:'.
-               .::(@:.`}</Text></Box>;
+    t12 = <Box flexDirection="column" alignItems="center"><Text color="#00FF00" bold={true}>{`     ██████████      
+   ██████████████   
+  ████████████████  
+ ██████████████████ 
+ ██████████████████ 
+ ██████████████████ 
+  █████ ████ ████   
+         ██         
+        ████        
+     ██████████     `}</Text></Box>;
     $[23] = t12;
   } else {
     t12 = $[23];
