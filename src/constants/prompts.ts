@@ -2,6 +2,7 @@
 import { type as osType, version as osVersion, release as osRelease } from 'os'
 import { env } from '../utils/env.js'
 import { getActiveProfile, loadModelProfile } from '../utils/model/modelProfile.js'
+import { getAntModelOverrideConfig } from '../utils/model/antModels.js'
 import { getIsGit } from '../utils/git.js'
 import { getCwd } from '../utils/cwd.js'
 import { getIsNonInteractiveSession } from '../bootstrap/state.js'

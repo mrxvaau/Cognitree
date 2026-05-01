@@ -20,6 +20,8 @@ export type Terminal = {
     | 'max_turns'
     | (string & {})
   error?: unknown
+  /** Diagnostic: turn count at exit (max_turns) */
+  turnCount?: number
 }
 
 /** Continue transition — the loop will iterate again. */
@@ -34,4 +36,8 @@ export type Continue = {
     | 'token_budget_continuation'
     | 'queued_command'
     | (string & {})
+  /** Diagnostic: number of committed collapses (collapse_drain_retry) */
+  committed?: number
+  /** Diagnostic: recovery attempt number (max_output_tokens_recovery) */
+  attempt?: number
 }

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Pure message type definitions extracted to break import cycles.
  *
  * This file contains only type definitions with no runtime dependencies.
@@ -296,9 +296,11 @@ export interface AttachmentMessage<A extends Record<string, unknown> = Record<st
 
 export interface TombstoneMessage {
   type: 'tombstone'
-  originalType: 'assistant' | 'user' | 'system'
-  uuid: UUID
-  timestamp: string
+  originalType?: 'assistant' | 'user' | 'system'
+  uuid?: UUID
+  timestamp?: string
+  /** The orphaned message being tombstoned (used by query.ts streaming fallback) */
+  message?: unknown
 }
 
 // ============================================================================
