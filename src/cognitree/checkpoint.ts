@@ -369,19 +369,21 @@ export function createCheckpoint(options: CreateCheckpointOptions): CheckpointRe
     } else {
       // Delta for non-base — get previous files from parent codebase
       const parentCodebasePath = path.join(cognitreeDir, 'checkpoints', parentId, 'codebase.json')
-      let previousFiles: string[] = []
+      let previousFiles: string[] | null = null
       if (fs.existsSync(parentCodebasePath)) {
         try {
           const parentCb = JSON.parse(fs.readFileSync(parentCodebasePath, 'utf8')) as CodebaseLayerData
           previousFiles = (parentCb.added ?? []).map(e => e.path)
         } catch {
-          // Fall back to full tree
-          codebaseData = buildFullTree(currentFiles, checkpointId)
-          fs.writeFileSync(path.join(cpDir, 'codebase.json'), JSON.stringify(codebaseData, null, 2), 'utf8')
-          // Continue without previous files
+          // Parse failed — fall back to full tree below
         }
       }
-      codebaseData = computeCodebaseDelta(previousFiles, currentFiles, checkpointId)
+      if (previousFiles !== null) {
+        codebaseData = computeCodebaseDelta(previousFiles, currentFiles, checkpointId)
+      } else {
+        // No valid parent codebase — store full tree instead
+        codebaseData = buildFullTree(currentFiles, checkpointId)
+      }
     }
 
     fs.writeFileSync(

@@ -93,34 +93,9 @@ export function scoreMemoryLayers(
  * Check if a JSON content string is empty (null, empty array, empty object).
  */
 function isContentEmpty(content: string): boolean {
-  try {
-    const parsed = JSON.parse(content) as unknown
-    if (parsed === null || parsed === undefined) return true
-    if (Array.isArray(parsed) && parsed.length === 0) return true
-
-    // Check for layer-specific emptiness
-    if (typeof parsed === 'object' && parsed !== null) {
-      const obj = parsed as Record<string, unknown>
-
-      // Value layers: value is null
-      if ('value' in obj && obj.value === null) return true
-
-      // Append layers: added is empty array
-      if ('added' in obj && Array.isArray(obj.added) && obj.added.length === 0) {
-        // Also check updated for hybrid layers
-        if ('updated' in obj && Array.isArray(obj.updated) && obj.updated.length === 0) {
-          return true
-        }
-        if (!('updated' in obj)) {
-          return true
-        }
-      }
-    }
-
-    return false
-  } catch {
-    return true  // Unparseable = empty
-  }
+  // Content is pre-formatted text (not raw JSON) by the time it reaches the scorer.
+  // Check if it's empty or whitespace-only.
+  return content.trim().length === 0
 }
 
 /**

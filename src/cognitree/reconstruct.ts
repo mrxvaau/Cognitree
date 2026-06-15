@@ -209,9 +209,27 @@ function applyCodebaseDelta(
   delta: CodebaseLayerData | null,
 ): CodebaseTreeNode | null {
   if (!delta) return current
-  if (!delta.delta && delta.tree) {
-    // Full tree — replace
-    return delta.tree
+
+  // Full replacement (delta.delta === false)
+  if (!delta.delta) {
+    // If an explicit tree is provided, use it directly
+    if (delta.tree) return delta.tree
+
+    // Otherwise, build the tree from delta.added (this is what buildFullTree produces)
+    if (delta.added && delta.added.length > 0) {
+      const tree: CodebaseTreeNode = { type: 'directory', root: '.', children: [] }
+      for (const entry of delta.added) {
+        tree.children!.push({
+          path: entry.path,
+          type: entry.type,
+          added_at: entry.checkpoint,
+        })
+      }
+      return tree
+    }
+
+    // Empty full replacement — return empty tree
+    return current
   }
 
   // If we have a full tree in the delta, use it

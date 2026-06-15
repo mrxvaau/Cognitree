@@ -33,6 +33,7 @@ import { init, initializeTelemetryAfterTrust } from './entrypoints/init.js';
 import { addToHistory } from './history.js';
 import type { Root } from './ink.js';
 import { launchRepl } from './replLauncher.js';
+import { onSessionStart } from './cognitree/manager/sessionLifecycle.js';
 import { hasGrowthBookEnvOverride, initializeGrowthBook, refreshGrowthBookAfterAuthChange } from './services/analytics/growthbook.js';
 import { fetchBootstrapData } from './services/api/bootstrap.js';
 import { type DownloadResult, downloadSessionFiles, type FilesApiConfig, parseFileSpecs } from './services/api/filesApi.js';
@@ -2594,6 +2595,13 @@ async function run(): Promise<CommanderCommand> {
       });
       gracefulShutdownSync(0);
       return;
+    }
+
+    // Cognitree: initialize session memory (silent fail if .cognitree/ missing)
+    try {
+      onSessionStart(process.cwd())
+    } catch {
+      // silent fail — never block startup
     }
 
     // --print mode

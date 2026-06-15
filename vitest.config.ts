@@ -40,6 +40,11 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     setupFiles: ['tests/setup.ts'],
     testTimeout: 30000,
+    // vmThreads: runs tests in V8 VMs within the same process.
+    // Required on Windows with bun — the default 'forks' pool calls
+    // child_process.fork() which fails (errno -4094, spawn UNKNOWN)
+    // because bun does not expose a 'node' binary for Node forking.
+    pool: 'vmThreads',
   },
   resolve: {
     alias: [

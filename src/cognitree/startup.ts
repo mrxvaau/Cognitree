@@ -19,28 +19,19 @@ import * as fs from 'fs'
 import * as path from 'path'
 import type { ActiveJson, CognitreeConfig, TreeJson } from './types.js'
 import { getSmartInject, getInjectMd } from './inject.js'
+import {
+  getCurrentUserPrompt,
+  setCurrentUserPrompt,
+} from './manager/sessionLifecycle.js'
 
 // ═══════════════════════════════════════════════════════════════════════
 // MODULE-LEVEL USER PROMPT STATE (Option B)
 // ═══════════════════════════════════════════════════════════════════════
 
-let _currentUserPrompt: string | null = null
-
-/**
- * Set the current user prompt text.
- * Call this in the REPL before getSystemPrompt() is invoked.
- */
-export function setCurrentUserPrompt(prompt: string | null): void {
-  _currentUserPrompt = prompt
-}
-
-/**
- * Get the current user prompt text.
- * Used by the cognitree injection section in prompts.ts.
- */
-export function getCurrentUserPrompt(): string | null {
-  return _currentUserPrompt
-}
+// _currentUserPrompt is now owned by manager/sessionLifecycle.ts.
+// setCurrentUserPrompt and getCurrentUserPrompt are re-exported from there
+// so all callers share a single source of truth.
+export { setCurrentUserPrompt, getCurrentUserPrompt }
 
 // ═══════════════════════════════════════════════════════════════════════
 // STATE TYPES

@@ -113,8 +113,9 @@ import { count } from './utils/array.js'
 import { StuckDetector } from './cognitree/stuckDetector.js'
 import { RecoveryInjector, MAX_RECOVERY_ATTEMPTS } from './cognitree/recoveryInjector.js'
 import { isCognitreeProject } from './cognitree/startup.js'
-import { updateMemory } from './cognitree/memory.js'
-import { reconstructActive } from './cognitree/reconstruct.js'
+import { cognitreeEventBus } from './cognitree/events/eventBus.js'
+import { onSessionStart, setCurrentUserPrompt } from './cognitree/manager/sessionLifecycle.js'
+import { getCwd } from './utils/cwd.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const snipModule = feature('HISTORY_SNIP')
@@ -285,6 +286,15 @@ async function* queryLoop(
   const budgetTracker = feature('TOKEN_BUDGET') ? createBudgetTracker() : null
 
   // ─── Cognitree Track 7: Self-Healing Agent Loop ────────────────────
+  onSessionStart(getCwd())
+  const firstUserMessage = params.messages.find((m: any) => m.role === 'user')
+  const userText = Array.isArray(firstUserMessage?.content) 
+    ? firstUserMessage?.content.find((c: any) => c.type === 'text')?.text 
+    : undefined
+  if (userText) {
+    setCurrentUserPrompt(userText)
+    cognitreeEventBus.emit({ type: 'first_prompt', content: userText })
+  }
   // Initialize stuck detector + recovery injector. These are loop-local:
   // new instance per queryLoop invocation. Only active for main thread
   // (subagents have their own loop instances).
@@ -1442,6 +1452,21 @@ async function* queryLoop(
           ? matchingResult.message.content
           : ''
       stuckDetector.recordToolCall(block.name, block.input, resultText)
+
+      // Emit Cognitree tracking events
+      if (block.name === 'Write' || block.name === 'Edit') {
+        cognitreeEventBus.emit({
+          type: 'file_changed',
+          path: (block.input as any).file_path || (block.input as any).target_file || (block.input as any).file,
+          tool: block.name as 'Write' | 'Edit' | 'MultiEdit'
+        })
+      }
+      if (block.name === 'TodoWrite' && resultText.includes('success')) {
+        cognitreeEventBus.emit({
+          type: 'todo_completed',
+          text: (block.input as any).todo_text || ''
+        })
+      }
     }
     // Record assistant text for circular reasoning detection
     const lastAssistant = assistantMessages.at(-1)
@@ -1452,6 +1477,7 @@ async function* queryLoop(
         .join(' ')
       if (textContent) {
         stuckDetector.recordAssistantMessage(textContent)
+        cognitreeEventBus.emit({ type: 'decision_made', text: textContent })
       }
     }
     const stuckSignal = stuckDetector.check()
@@ -1461,45 +1487,20 @@ async function* queryLoop(
     ) {
       cognitreeRecoveryAttempts++
 
-      // Load past mistakes from Cognitree memory (if available)
-      let pastMistakes: string[] = []
-      try {
-        const cwd = process.cwd()
-        if (isCognitreeProject(cwd)) {
-          const cognitreeDir = require('path').join(cwd, '.cognitree')
-          const memState = reconstructActive(cognitreeDir)
-          if (memState?.mistakes) {
-            pastMistakes = memState.mistakes
-              .filter((m: { status?: string }) => m.status === 'active')
-              .slice(-3)
-              .map((m: { text: string; fix?: string }) =>
-                m.fix ? `${m.text} (fix: ${m.fix})` : m.text,
-              )
-          }
-          // Persist current failure as a mistake
-          updateMemory({
-            cognitreeDir,
-            layer: 'mistakes',
-            data: {
-              added: [
-                {
-                  text: `Stuck: ${stuckSignal.pattern} — ${stuckSignal.evidence}`,
-                  fix: stuckSignal.recoveryHint,
-                  severity: cognitreeRecoveryAttempts >= 2 ? 'critical' : 'medium',
-                },
-              ],
-            },
-          })
-        }
-      } catch {
-        // Cognitree not available — proceed without memory
+      if (stuckSignal.pattern && stuckSignal.recoveryHint) {
+        cognitreeEventBus.emit({
+          type: 'stuck_detected',
+          pattern: stuckSignal.pattern,
+          evidence: stuckSignal.evidence ?? '',
+          hint: stuckSignal.recoveryHint
+        })
       }
 
       // Build recovery message
       const recovery = recoveryInjector.buildRecovery(
         stuckSignal,
         cognitreeRecoveryAttempts,
-        pastMistakes,
+        [],
       )
 
       // Yield warning to TUI

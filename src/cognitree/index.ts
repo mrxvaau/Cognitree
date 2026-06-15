@@ -2,83 +2,121 @@
  * COGNITREE — Barrel Export
  *
  * Single entry point for all Cognitree memory engine modules.
+ *
+ * NOTE: Exports from core/ (Phase 1 — Layer<T> schema) are canonical.
+ * Old root-layer modules (types.ts, reconstruct.ts, memory.ts, checkpoint.ts,
+ * branch.ts) still exist but are NOT re-exported here to avoid schema conflicts.
  */
 
-// Core types
+// ═══════════════════════════════════════════════════════════════════════
+// Core types (Phase 1 — canonical Layer<T> schema)
+// ═══════════════════════════════════════════════════════════════════════
+
 export type {
-  ActiveJson,
-  AppendItem,
-  AppendLayerData,
-  CheckpointMeta,
-  CodebaseEntry,
-  CodebaseLayerData,
-  CodebaseTreeNode,
-  CognitreeConfig,
-  HybridItem,
-  HybridLayerData,
-  MemoryLayer,
-  MemoryState,
-  PromptStateData,
-  RenamedEntry,
-  ScoredLayer,
-  SmartInjectResult,
-  StatusUpdate,
-  TaskCategory,
-  TaskSignal,
+  Layer,
+  Mistake,
+  GoalLayer,
+  ProgressLayer,
+  DecisionsLayer,
+  MistakesLayer,
+  ChangedLayer,
+  NextLayer,
+  WarningsLayer,
+  MetaMeta,
+  CheckpointData,
   TreeEntry,
   TreeJson,
-  ValidLayer,
-  ValueLayerData,
-} from './types.js'
+  ActiveJson,
+  LayerName,
+} from './core/types.js'
+
+export { LAYER_NAMES } from './core/types.js'
+
+// ═══════════════════════════════════════════════════════════════════════
+// Core storage (Phase 1)
+// ═══════════════════════════════════════════════════════════════════════
 
 export {
-  VALID_LAYERS,
-  VALUE_LAYERS,
-  APPEND_LAYERS,
-  HYBRID_LAYERS,
-  VALID_SEVERITIES,
-  VALID_STATUSES,
-} from './types.js'
+  readLayer,
+  writeLayer,
+  readMeta,
+  writeMeta,
+  readTree,
+  writeTree,
+  readActive,
+  writeActive,
+  initCognitreeDir,
+  checkpointDir,
+  createCheckpointDir,
+} from './core/storage.js'
 
-// Reconstruction engine
-export { reconstruct, reconstructActive, getActiveCheckpoint } from './reconstruct.js'
+// ═══════════════════════════════════════════════════════════════════════
+// Core checkpoint (Phase 1)
+// ═══════════════════════════════════════════════════════════════════════
 
-// Memory updater
-export { updateMemory } from './memory.js'
-export type { UpdateMemoryOptions } from './memory.js'
-
-// Checkpoint creator
-export { createCheckpoint } from './checkpoint.js'
-export type { CreateCheckpointOptions } from './checkpoint.js'
-
-// Branch creator
-export { createBranch } from './branch.js'
-export type { CreateBranchOptions } from './branch.js'
-
-// Task classifier (Track 6)
-export { classifyTask } from './taskClassifier.js'
-
-// Memory scorer (Track 6)
-export { scoreMemoryLayers, getIncludedLayers, getExcludedLayers } from './memoryScorer.js'
-
-// Smart injection (Track 5 + 6)
-export { getInjectMd, getSmartInject, regenerateInjectMd } from './inject.js'
-
-// Startup loader (Track 5 + 6)
 export {
+  createCheckpoint,
+  loadCheckpoint,
+  listCheckpoints,
+  listCheckpointsByBranch,
+  getActiveCheckpointId,
+} from './core/checkpoint.js'
+
+export type {
+  CreateCheckpointOptions,
+  CheckpointResult,
+} from './core/checkpoint.js'
+
+// ═══════════════════════════════════════════════════════════════════════
+// Core branch (Phase 1)
+// ═══════════════════════════════════════════════════════════════════════
+
+export { createBranch, listBranches } from './core/branch.js'
+export type { CreateBranchOptions, BranchResult } from './core/branch.js'
+
+// ═══════════════════════════════════════════════════════════════════════
+// Injection (Phase 2/3 — task classifier, memory scorer, injector)
+// ═══════════════════════════════════════════════════════════════════════
+
+export { classifyTask } from './injection/taskClassifier.js'
+export { scoreLayers, selectLayersForBudget } from './injection/memoryScorer.js'
+export { buildInjectString } from './injection/injector.js'
+export { readInjectMd, writeInjectMd } from './injection/injectMd.js'
+
+// ═══════════════════════════════════════════════════════════════════════
+// Events (collectors + event bus)
+// ═══════════════════════════════════════════════════════════════════════
+
+export { cognitreeEventBus } from './events/eventBus.js'
+
+// ═══════════════════════════════════════════════════════════════════════
+// Manager (session lifecycle)
+// ═══════════════════════════════════════════════════════════════════════
+
+export {
+  onSessionStart,
+  onSessionEnd,
+  getCognitreeInjection,
   setCurrentUserPrompt,
-  getCurrentUserPrompt,
+} from './manager/sessionLifecycle.js'
+
+// ═══════════════════════════════════════════════════════════════════════
+// Startup (legacy — still useful as a facade)
+// ═══════════════════════════════════════════════════════════════════════
+
+export {
   isCognitreeProject,
   loadCognitreeState,
-  getCognitreeInjection,
   getCognitreeStatus,
 } from './startup.js'
 export type { CognitreeLoadResult } from './startup.js'
 
-// Stuck detector (Track 7)
+// ═══════════════════════════════════════════════════════════════════════
+// Self-healing (Track 7 — stuck detection + recovery)
+// ═══════════════════════════════════════════════════════════════════════
+
 export { StuckDetector } from './stuckDetector.js'
 export type { StuckPattern, StuckSignal, ToolCallRecord } from './stuckDetector.js'
 
-// Recovery injector (Track 7)
 export { RecoveryInjector, MAX_RECOVERY_ATTEMPTS } from './recoveryInjector.js'
 export type { RecoveryContext } from './recoveryInjector.js'
