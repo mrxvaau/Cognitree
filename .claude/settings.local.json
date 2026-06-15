@@ -1,0 +1,11 @@
+{
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "claude-code-explorer"
+  ],
+  "permissions": {
+    "allow": [
+      "Bash(git ls-tree:*)"
+    ]
+  }
+}

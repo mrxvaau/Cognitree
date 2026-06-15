@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun *)",
+      "Bash(findstr *)",
+      "Bash(npx *)",
+      "Bash(node *)",
+      "Bash(set *)",
+      "Bash(del *)",
+      "Bash(taskkill *)",
+      "Bash(powershell *)"
+    ]
+  },
+  "$version": 3
+}

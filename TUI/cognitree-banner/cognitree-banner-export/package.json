@@ -1,0 +1,17 @@
+{
+  "name": "cognitree-banner",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "tsx ghost-banner.tsx",
+    "warlord": "tsx design1-warlord.tsx",
+    "ghost": "tsx design2-ghost.tsx",
+    "matrix": "tsx design3-matrix.tsx",
+    "slab": "tsx design4-slab.tsx"
+  },
+  "dependencies": {
+    "ink": "^4.4.1",
+    "react": "^18.3.1",
+    "tsx": "^4.0.0"
+  }
+}
