@@ -42,4 +42,10 @@ bun.lockb
 tmp/
 temp/
 
+# Cognitree runtime data (session memory — not source)
+.cognitree/
+
+# Cognitree standalone engine (separate git repo)
+cognitree_engine/
+
 
