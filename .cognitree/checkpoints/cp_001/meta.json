@@ -1,0 +1,11 @@
+{
+  "id": "cp_001",
+  "parent": null,
+  "branch": "main",
+  "depth": 0,
+  "is_base": true,
+  "confidence": 1,
+  "prompt": "Manual checkpoint",
+  "timestamp": "2026-04-29T02:39:25.162Z",
+  "deleted": false
+}

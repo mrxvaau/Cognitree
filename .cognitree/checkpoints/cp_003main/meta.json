@@ -1,0 +1,11 @@
+{
+  "id": "cp_003main",
+  "parent": "cp_002",
+  "branch": "main",
+  "depth": 1,
+  "is_base": false,
+  "confidence": 1,
+  "prompt": "Fixed local TypeScript errors and widened transition diagnostics",
+  "timestamp": "2026-05-01T00:43:59.798Z",
+  "deleted": false
+}
