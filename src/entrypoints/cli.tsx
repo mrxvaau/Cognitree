@@ -196,7 +196,11 @@ async function main(): Promise<void> {
     // MACRO.VERSION is inlined at build time
     // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log(`${MACRO.VERSION} (Claude Code)`);
-    return;
+    // Must process.exit() explicitly: on Windows the ref()'d keepalive interval
+    // above prevents natural event loop drain, causing the watchdog to fire
+    // after 120s even though main() has returned.
+    // eslint-disable-next-line custom-rules/no-process-exit
+    process.exit(0);
   }
 
   // For all other paths, load the startup profiler

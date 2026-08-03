@@ -157,7 +157,27 @@ const buildOptions: esbuild.BuildOptions = {
   // Single-file output — no code splitting for CLI tools
   splitting: false,
 
-  plugins: [srcResolverPlugin, stubMissingPlugin],
+  // ── Plugin: inline .md files as text strings ──
+  // claudeApiContent.ts and other bundled skill files import .md files
+  // directly. Bun handles these via its built-in text loader; esbuild
+  // needs an explicit plugin to do the same.
+  plugins: [
+    {
+      name: 'md-text-loader',
+      setup(build) {
+        const { readFileSync, existsSync: ex } = require('fs') as typeof import('fs')
+        build.onLoad({ filter: /\.md$/ }, (args) => {
+          if (!ex(args.path)) {
+            return { contents: 'export default "";', loader: 'js' }
+          }
+          const text = readFileSync(args.path, 'utf-8')
+          return { contents: `export default ${JSON.stringify(text)};`, loader: 'js' }
+        })
+      },
+    },
+    srcResolverPlugin,
+    stubMissingPlugin,
+  ],
 
   // Use tsconfig for baseUrl / paths resolution (complements plugin above)
   tsconfig: resolve(ROOT, 'tsconfig.json'),
@@ -243,7 +263,11 @@ const buildOptions: esbuild.BuildOptions = {
   treeShaking: true,
 
   // Define replacements — inline constants at build time
-  // MACRO.* — originally inlined by Bun's bundler at compile time
+  // MACRO.* — originally inlined by Bun's bundler at compile time.
+  // NOTE: esbuild's define replaces MACRO.PROP member expressions but does NOT
+  // handle bare `MACRO` identifier references (e.g. `typeof MACRO`, object
+  // spread, `getEventMetadata` which uses MACRO directly). Those are covered
+  // by the globalThis.MACRO assignment in the banner below.
   // process.env.USER_TYPE — eliminates 'ant' (Anthropic-internal) code branches
   define: {
     'MACRO.VERSION': JSON.stringify(version),
@@ -251,15 +275,32 @@ const buildOptions: esbuild.BuildOptions = {
     'MACRO.ISSUES_EXPLAINER': JSON.stringify(
       'report issues at https://github.com/anthropics/claude-code/issues'
     ),
+    // Additional MACRO properties found in source:
+    'MACRO.FEEDBACK_CHANNEL': JSON.stringify('#claude-code-feedback'),
+    'MACRO.NATIVE_PACKAGE_URL': 'undefined',  // no native package in external build
+    'MACRO.VERSION_CHANGELOG': 'undefined',   // no changelog blob in external build
     'process.env.USER_TYPE': '"external"',
     'process.env.NODE_ENV': minify ? '"production"' : '"development"',
   },
 
-  // Banner: shebang for direct CLI execution + explicit ESM marker so Bun
-  // doesn't misclassify this file as CJS when it sees `module`/`exports`
-  // references inside bundled lodash-es CJS detection code.
+  // Banner: shebang + globalThis.MACRO safety net.
+  // esbuild `define` replaces MACRO.PROP member expressions, but bare
+  // `MACRO` identifier references (typeof MACRO, object access in functions
+  // like getEventMetadata) need the global to actually exist at runtime.
+  // This banner line runs before any app code, making MACRO always defined.
   banner: {
-    js: '#!/usr/bin/env node\n',
+    js: [
+      '#!/usr/bin/env node',
+      `globalThis.MACRO = {`,
+      `  VERSION: ${JSON.stringify(version)},`,
+      `  PACKAGE_URL: ${JSON.stringify('@anthropic-ai/claude-code')},`,
+      `  ISSUES_EXPLAINER: ${JSON.stringify('report issues at https://github.com/anthropics/claude-code/issues')},`,
+      `  FEEDBACK_CHANNEL: ${JSON.stringify('#claude-code-feedback')},`,
+      `  NATIVE_PACKAGE_URL: undefined,`,
+      `  VERSION_CHANGELOG: undefined,`,
+      `};`,
+      '',
+    ].join('\n'),
   },
 
 

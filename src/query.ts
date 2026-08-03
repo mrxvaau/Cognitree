@@ -1454,7 +1454,7 @@ async function* queryLoop(
       stuckDetector.recordToolCall(block.name, block.input, resultText)
 
       // Emit Cognitree tracking events
-      if (block.name === 'Write' || block.name === 'Edit') {
+      if (block.name === 'Write' || block.name === 'Edit' || block.name === 'MultiEdit') {
         cognitreeEventBus.emit({
           type: 'file_changed',
           path: (block.input as any).file_path || (block.input as any).target_file || (block.input as any).file,

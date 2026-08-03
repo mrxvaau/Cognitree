@@ -33,7 +33,8 @@ import { init, initializeTelemetryAfterTrust } from './entrypoints/init.js';
 import { addToHistory } from './history.js';
 import type { Root } from './ink.js';
 import { launchRepl } from './replLauncher.js';
-import { onSessionStart } from './cognitree/manager/sessionLifecycle.js';
+import { onSessionStart, setCurrentUserPrompt } from './cognitree/manager/sessionLifecycle.js';
+import { cognitreeEventBus } from './cognitree/events/eventBus.js';
 import { hasGrowthBookEnvOverride, initializeGrowthBook, refreshGrowthBookAfterAuthChange } from './services/analytics/growthbook.js';
 import { fetchBootstrapData } from './services/api/bootstrap.js';
 import { type DownloadResult, downloadSessionFiles, type FilesApiConfig, parseFileSpecs } from './services/api/filesApi.js';
@@ -2597,9 +2598,16 @@ async function run(): Promise<CommanderCommand> {
       return;
     }
 
-    // Cognitree: initialize session memory (silent fail if .cognitree/ missing)
+    // Cognitree: initialize session memory and capture the user prompt early —
+    // before print.ts / runHeadless so the goal is recorded even if the API
+    // call fails (e.g. login check). Silent fail: never block startup.
     try {
       onSessionStart(process.cwd())
+      const cognitreePromptText = typeof inputPrompt === 'string' ? inputPrompt.trim() : ''
+      if (cognitreePromptText) {
+        setCurrentUserPrompt(cognitreePromptText)
+        cognitreeEventBus.emit({ type: 'first_prompt', content: cognitreePromptText })
+      }
     } catch {
       // silent fail — never block startup
     }

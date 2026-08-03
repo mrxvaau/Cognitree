@@ -40,9 +40,20 @@ function countCheckpointsOnBranch(tree: TreeJson, branch: string): number {
 /**
  * Generate the next sequential checkpoint number across all branches.
  * Format: cp_NNN (padded to 3 digits) + optional branch letter.
+ *
+ * Uses max(tree count, disk count) as the floor so orphaned checkpoint
+ * directories that are not registered in tree.json don't cause collisions.
  */
-function generateCheckpointId(tree: TreeJson, branch: string): string {
-  const total = Object.keys(tree.checkpoints).length + 1
+function generateCheckpointId(tree: TreeJson, branch: string, cognitreeDir: string): string {
+  const fromTree = Object.keys(tree.checkpoints).length
+  let fromDisk = 0
+  try {
+    const cpRoot = path.join(cognitreeDir, 'checkpoints')
+    if (fs.existsSync(cpRoot)) {
+      fromDisk = fs.readdirSync(cpRoot).length
+    }
+  } catch {}
+  const total = Math.max(fromTree, fromDisk) + 1
   const num = String(total).padStart(3, '0')
 
   if (branch === 'main') {
@@ -120,7 +131,7 @@ export function createCheckpoint(options: CreateCheckpointOptions): CheckpointRe
       ? options.parentId
       : (active?.checkpoint_id ?? null)
 
-    const checkpointId = generateCheckpointId(tree, branch)
+    const checkpointId = generateCheckpointId(tree, branch, cognitreeDir)
     const now = new Date().toISOString()
 
     // Create directory — throws if it already exists

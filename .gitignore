@@ -155,3 +155,4 @@ scratch/
 
 # Standalone JS engine (has its own .git repo — not a submodule)
 cognitree_engine/
+node_modules

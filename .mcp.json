@@ -6,9 +6,9 @@
         "mcp-server/dist/src/index.js"
       ],
       "env": {
-        "CLAUDE_CODE_SRC_ROOT": "./src",
+        "CLAUDE_CODE_SRC_ROOT": "./mcp-server/src",
         "MCP_CACHE_TTL_SECONDS": "300",
-        "MCP_MEMORY_FILE": "./CODEBASE.md",
+        "MCP_MEMORY_FILE": "./mcp-server/CODEBASE.md",
         "MCP_MODEL": "opus"
       }
     }

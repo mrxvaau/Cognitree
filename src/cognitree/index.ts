@@ -120,3 +120,22 @@ export type { StuckPattern, StuckSignal, ToolCallRecord } from './stuckDetector.
 
 export { RecoveryInjector, MAX_RECOVERY_ATTEMPTS } from './recoveryInjector.js'
 export type { RecoveryContext } from './recoveryInjector.js'
+
+// ═══════════════════════════════════════════════════════════════════════
+// Codebase tracking (blob store, snapshots, rollback, GC)
+// ═══════════════════════════════════════════════════════════════════════
+
+export { scanSourceTree, diffTrees, IGNORE_DIRS, INCLUDE_EXTENSIONS, IGNORE_FILES } from './codebase/treeScanner.js'
+export type { FileEntry, SourceTree, TreeDiff } from './codebase/treeScanner.js'
+
+export { writeBlob, readBlob, hasBlob, hashContent, listAllBlobHashes, getBlobStoreSizeBytes } from './codebase/blobStore.js'
+
+export { captureSnapshot, readSnapshot, snapshotExists, MAX_FILE_SIZE } from './codebase/codeSnapshot.js'
+export type { SnapshotManifest } from './codebase/codeSnapshot.js'
+
+export { rollbackToCheckpoint } from './codebase/rollback.js'
+export type { RollbackResult } from './codebase/rollback.js'
+
+export { collectGarbage } from './codebase/blobGC.js'
+export type { GCResult } from './codebase/blobGC.js'
+
