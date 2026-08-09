@@ -4,6 +4,7 @@ import autofixPr from './commands/autofix-pr/index.js'
 import cognitreeStatus from './commands/cognitree-status.js'
 import cognitreeCheckpoint from './commands/cognitree-checkpoint.js'
 import cognitreeBranch from './commands/cognitree-branch.js'
+import cognitreeInit from './commands/cognitree-init.js'
 import backfillSessions from './commands/backfill-sessions/index.js'
 import btw from './commands/btw/index.js'
 import byok from './commands/byok/index.js'
@@ -268,6 +269,7 @@ const COMMANDS = memoize((): Command[] => [
   cognitreeStatus,
   cognitreeCheckpoint,
   cognitreeBranch,
+  cognitreeInit,
   btw,
   byok,
   chrome,

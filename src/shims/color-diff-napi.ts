@@ -10,7 +10,8 @@ export class ColorDiff {
 }
 
 export class ColorFile {
-  constructor(_: unknown) {}
+  constructor(_code: unknown, _filePath: unknown) {}
+  render(_theme: unknown, _width: unknown, _dim: unknown): string[] { return [] }
   getColors(): unknown[] { return [] }
 }
 

@@ -25,7 +25,7 @@ export function CondensedLogo() {
 
   const [sysInfo] = useState(() => getSystemInfoSync());
 
-  const hasMd = existsSync(join(cwd, 'CLAUDE.md'));
+  const hasMd = existsSync(join(cwd, 'Cognitree.md'));
 
   const now = new Date();
   const timeStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
@@ -80,7 +80,7 @@ export function CondensedLogo() {
           <Text>  <Text color="#00FF00">{'\u{1F552}'}</Text> <Text dimColor={true}>Time   </Text> <Text>{timeStr}</Text></Text>
           <Text>  <Text color="#00FF00">{'\u{1F916}'}</Text> <Text dimColor={true}>Model  </Text> <Text bold={true} color="#00FF00">{modelDisplayName}{effortSuffix}</Text> <Text dimColor={true}>{'\u00b7'} {billingType}</Text></Text>
           <Text>  <Text color="#00FF00">{'\u{1F4C2}'}</Text> <Text dimColor={true}>Dir    </Text> <Text>{cwdDisplay}</Text></Text>
-          <Text>  <Text color="#00FF00">{'\u{1F4C4}'}</Text> <Text dimColor={true}>Config </Text> {hasMd ? <Text color="#00FF00">{'\u2713'} CLAUDE.md</Text> : <Text dimColor={true}>{'\u2717'} No CLAUDE.md</Text>}</Text>
+          <Text>  <Text color="#00FF00">{'\u{1F4C4}'}</Text> <Text dimColor={true}>Config </Text> {hasMd ? <Text color="#00FF00">{'\u2713'} Cognitree.md</Text> : <Text dimColor={true}>{'\u2717'} No Cognitree.md file</Text>}</Text>
         </Box>
 
         {/* System Section */}

@@ -133,6 +133,9 @@ export type ProjectConfig = {
   }
   /** Spawn mode for `claude remote-control` multi-session. Set by first-run dialog or `w` toggle. */
   remoteControlSpawnMode?: 'same-dir' | 'worktree'
+
+  // Cognitree auto-init prompt: true = user declined, don't ask again
+  cognitreeInitDeclined?: boolean
 }
 
 const DEFAULT_PROJECT_CONFIG: ProjectConfig = {

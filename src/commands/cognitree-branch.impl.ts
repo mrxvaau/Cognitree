@@ -11,7 +11,7 @@ export const call: LocalCommandCall = async (args) => {
   const cwd = getCwd()
 
   if (!isCognitreeProject(cwd)) {
-    return { type: 'text', value: 'Cognitree: not initialized in this directory. Run cognitree init first.' }
+    return { type: 'text', value: 'Cognitree: not initialized in this directory. Run /cognitree-init first.' }
   }
 
   const checkpointId = args.trim()

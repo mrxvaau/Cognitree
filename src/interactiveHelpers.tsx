@@ -192,6 +192,25 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
     // Now that trust is established, prefetch system context if it wasn't already
     void getSystemContext();
 
+    // ── Cognitree auto-init offer ──────────────────────────────────────────
+    // After trust is established, offer to initialize Cognitree memory
+    // for this project if it isn't already set up. One-time prompt per project.
+    {
+      const { isCognitreeProject } = await import('./cognitree/startup.js');
+      const cwd_0 = getCwd();
+      const config_1 = getGlobalConfig();
+      const { getProjectPathForConfig } = await import('./utils/config.js');
+      const projectPath = getProjectPathForConfig();
+      const projectConfig = config_1.projects?.[projectPath];
+
+      if (!isCognitreeProject(cwd_0) && !projectConfig?.cognitreeInitDeclined) {
+        const { CognitreeInitDialog } = await import(
+          './components/CognitreeInitDialog.js'
+        );
+        await showSetupDialog(root, done => <CognitreeInitDialog onDone={done} />);
+      }
+    }
+
     // If settings are valid, check for any mcp.json servers that need approval
     const {
       errors: allErrors

@@ -177,7 +177,7 @@ export function getCognitreeStatus(cwd: string): string {
   const state = loadCognitreeState(cwd)
 
   if (!state.loaded) {
-    return 'Cognitree: not initialized in this directory'
+    return 'Cognitree: not initialized in this directory. Run /cognitree-init to set up.'
   }
 
   const lines: string[] = []
