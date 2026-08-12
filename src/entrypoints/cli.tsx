@@ -169,9 +169,29 @@ async function main(): Promise<void> {
       if (isNonClaude) {
         process.env.CLAUDE_CODE_SIMPLE ??= '1';
         process.env.CLAUDE_CODE_DISABLE_THINKING ??= '1';
+        // Enable fullscreen mode (ScrollBox + sticky input) for BYOK setups.
+        // Without this, FullscreenLayout uses sequential rendering with no
+        // scroll container, causing the input box to scroll off screen.
+        process.env.CLAUDE_CODE_NO_FLICKER ??= '1';
       }
     }
   } catch { /* Non-fatal — continue without BYOK config */ }
+
+  // ── Auto-enable fullscreen for direct BYOK env vars ────────────────
+  // The byok.env block above only runs when the file exists AND
+  // LLM_BASE_URL isn't already set. When users set LLM_BASE_URL directly
+  // (e.g. for Ollama, local LLMs, Cognitree), enable fullscreen mode so
+  // FullscreenLayout uses ScrollBox (sticky input, scroll-on-overflow)
+  // instead of sequential rendering where input scrolls off screen.
+  {
+    const directUrl = process.env.LLM_BASE_URL || '';
+    const isDirectNonClaude = directUrl &&
+      !directUrl.includes('anthropic') &&
+      !directUrl.includes('claude');
+    if (isDirectNonClaude) {
+      process.env.CLAUDE_CODE_NO_FLICKER ??= '1';
+    }
+  }
 
   // Watchdog: if boot hangs for >120s, log diagnostic info and exit.
   // unref() ensures the timer doesn't keep the process alive on normal exit.
