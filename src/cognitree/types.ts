@@ -18,22 +18,26 @@ export interface ActiveJson {
   switched_at: string
 }
 
-/** Entry in tree.json's checkpoints map */
+/** Entry in tree.json's checkpoints map. Older writers only persisted
+ *  {id, parent, branch, created_at} — treat everything else as optional so
+ *  readers don't crash on legacy files. */
 export interface TreeEntry {
   id: string
   parent: string | null
   branch: string
-  depth: number
-  is_base: boolean
-  deleted: boolean
-  timestamp: string
+  depth?: number
+  is_base?: boolean
+  deleted?: boolean
+  /** ISO timestamp — newer writers; legacy files use created_at */
+  timestamp?: string
+  created_at?: string
 }
 
 /** .cognitree/tree.json — the full checkpoint tree */
 export interface TreeJson {
   project: string
   created: string
-  total_checkpoints: number
+  total_checkpoints?: number
   checkpoints: Record<string, TreeEntry>
 }
 

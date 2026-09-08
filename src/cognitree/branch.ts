@@ -106,8 +106,8 @@ export function createBranch(options: CreateBranchOptions): BranchResult | null 
       m => m.status !== 'resolved' && m.severity === 'critical',
     )
 
-    // Generate new checkpoint ID
-    const total = tree.total_checkpoints + 1
+    // Generate new checkpoint ID (total_checkpoints optional on legacy trees)
+    const total = (tree.total_checkpoints ?? 0) + 1
     const num = String(total).padStart(3, '0')
     const checkpointId = `cp_${num}${letter}`
 

@@ -100,10 +100,21 @@ function mtimeMs(filePath: string): number {
 	}
 }
 
+/** Legacy trees lack total_checkpoints — count live entries instead */
+function countNonDeleted(treeJson: TreeJson): number {
+	let n = 0
+	for (const entry of Object.values(treeJson.checkpoints)) {
+		if (!entry.deleted) n++
+	}
+	return n
+}
+
 /** Returns a short human-readable label for a node */
 function nodeLabel(entry: TreeEntry): string {
-	// For branch base checkpoints: show the branch name
-	if (entry.is_base && entry.branch !== 'main') {
+	// For branch base checkpoints: show the branch name. is_base may be
+	// absent in legacy files — a root checkpoint (no parent) is a base.
+	const isBase = entry.is_base ?? entry.parent === null
+	if (isBase && entry.branch !== 'main') {
 		return entry.branch
 	}
 	// For main-branch checkpoints: show cp_001, cp_002...
@@ -126,24 +137,30 @@ function buildTree(
 	activeJson: ActiveJson,
 	cognitreeDir: string,
 ): TreeNodeData[] {
-	const entries = Object.values(treeJson.checkpoints).filter((e) => !e.deleted)
 	const activeId = activeJson.checkpoint_id
 
-	// Build a map of id → TreeNodeData
-	const nodeMap = new Map<string, TreeNodeData>()
+	// Build a map of id → TreeNodeData. Legacy tree.json files only persist
+	// {id, parent, branch, created_at}; depth/is_base/timestamp are derived
+	// here so sorting and rendering never throw on them.
+	const entries = Object.values(treeJson.checkpoints).filter((e) => !e.deleted)
+	const needsDepth = new Set<string>()
 
+	const nodeMap = new Map<string, TreeNodeData>()
 	for (const entry of entries) {
 		const confidence = readConfidence(cognitreeDir, entry.id)
+		if (entry.depth === undefined) needsDepth.add(entry.id)
 		const node: TreeNodeData = {
 			id: entry.id,
 			label: nodeLabel(entry),
 			branch: entry.branch,
-			depth: entry.depth,
-			isBase: entry.is_base,
+			// is_base defaults to true for roots (a root IS a branch base);
+			// missing depth is re-derived after parents are wired below.
+			depth: entry.depth ?? 0,
+			isBase: entry.is_base ?? entry.parent === null,
 			isActive: entry.id === activeId,
 			isFallback: isFallbackBranch(entry.branch),
 			confidence,
-			timestamp: entry.timestamp,
+			timestamp: entry.timestamp ?? entry.created_at ?? '',
 			children: [],
 			parentId: entry.parent,
 		}
@@ -160,7 +177,23 @@ function buildTree(
 		}
 	}
 
-	// Sort children: main branch first, then by timestamp
+	// Legacy files lack depth — derive it as distance from the root via BFS.
+	if (needsDepth.size > 0) {
+		const queue: Array<{ node: TreeNodeData; depth: number }> = roots.map((n) => ({
+			node: n,
+			depth: 0,
+		}))
+		while (queue.length > 0) {
+			const { node, depth } = queue.shift()!
+			if (needsDepth.has(node.id)) node.depth = depth
+			for (const child of node.children) {
+				queue.push({ node: child, depth: depth + 1 })
+			}
+		}
+	}
+
+	// Sort children: main branch first, then by timestamp (created_at for
+	// legacy files — both normalized into node.timestamp above)
 	function sortChildren(nodes: TreeNodeData[]): void {
 		nodes.sort((a, b) => {
 			if (a.branch === 'main' && b.branch !== 'main') return -1
@@ -238,7 +271,7 @@ function load(): void {
 			activeCheckpointId: activeJson.checkpoint_id,
 			activeBranch: activeJson.branch,
 			project: treeJson.project ?? null,
-			totalCheckpoints: treeJson.total_checkpoints,
+			totalCheckpoints: treeJson.total_checkpoints ?? countNonDeleted(treeJson),
 			isLoaded: true,
 			error: null,
 		})

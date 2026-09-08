@@ -59,7 +59,8 @@ const MAX_SCAN_FILES = 500
  * where x is the branch letter suffix.
  */
 function generateCheckpointId(tree: TreeJson, branch: string): string {
-  const total = tree.total_checkpoints + 1
+  // total_checkpoints is optional on legacy trees (older writers omitted it)
+  const total = (tree.total_checkpoints ?? 0) + 1
   const num = String(total).padStart(3, '0')
 
   if (branch === 'main') {
@@ -269,7 +270,7 @@ export function createCheckpoint(options: CreateCheckpointOptions): CheckpointRe
     let parentDepth = -1
     let confidence = 1.0
     if (parentId && tree.checkpoints[parentId]) {
-      parentDepth = tree.checkpoints[parentId].depth
+      parentDepth = tree.checkpoints[parentId].depth ?? -1
       // Read parent meta for confidence
       const parentMetaPath = path.join(cognitreeDir, 'checkpoints', parentId, 'meta.json')
       if (fs.existsSync(parentMetaPath)) {
