@@ -5024,7 +5024,10 @@ export function REPL({
   }, []);
 
   const termSize = typeof process !== 'undefined' && process.stdout
-    ? { columns: Math.max(40, (process.stdout.columns ?? 80) - TREE_PANEL_WIDTH), rows: terminalRows }
+    // No Math.max floor: on terminals narrower than sidebar(34) + 40, the
+    // real pane IS narrower than 40 — a floor would make components wrap
+    // for 40 cols and render into a narrower Yoga column, clipping text.
+    ? { columns: Math.max(20, (process.stdout.columns ?? 80) - TREE_PANEL_WIDTH), rows: terminalRows }
     : { columns: 80, rows: 24 };
 
   const cognitreeWrapped = (

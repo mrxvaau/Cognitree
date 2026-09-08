@@ -102,7 +102,11 @@ function PromptInputFooter({
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
   const lastAssistantMessageId = useMemo(() => getLastAssistantMessageId(messages), [messages]);
-  const isNarrow = columns < 80;
+  // Narrow layout threshold is 46 pane columns, not 80: inside the REPL
+  // two-panel layout, useTerminalSize reports physical columns minus the
+  // 34-col tree sidebar, so a bare "< 80" would never trigger on 80-col
+  // terminals (pane maxes at 46) and stacked mode would never engage.
+  const isNarrow = columns < 46;
   // In fullscreen the bottom slot is flexShrink:0, so every row here is a row
   // stolen from the ScrollBox. Drop the optional StatusLine first. Non-fullscreen
   // has terminal scrollback to absorb overflow, so we never hide StatusLine there.

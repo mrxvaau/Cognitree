@@ -19,8 +19,10 @@ import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { type TreeNodeData, useCognitreeTree } from '../../hooks/useCognitreeTree.js'
 import { Box, type Key, Text, useInput } from '../../ink.js'
+import { createCheckpoint } from '../../cognitree/checkpoint.js'
 import { getCwd } from '../../utils/cwd.js'
 import { TreeNode } from './TreeNode.js'
+import * as path from 'node:path'
 
 // ═══════════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -30,12 +32,12 @@ const PANEL_WIDTH = 34
 
 // Fixed rows consumed by non-tree content:
 //   border top(1) + header(1) + project(1) + divider(1)
-//   + bottom-divider(1) + keys-header(1) + keys-rows(3) + border-bot(1) = 10
-// (keys-rows is 3 since the focus-toggle legend rework). The transient
+//   + bottom-divider(1) + keys-header(1) + keys-rows(2) + border-bot(1) = 9
+// (keys-rows is 2 after the honest-actions legend rework). The transient
 // status message row renders only while a message is showing — it may
 // overlap the last visible tree row for 2s, which is accepted.
 // Leave at least 1 visible tree row.
-const FIXED_ROWS = 10
+const FIXED_ROWS = 9
 
 // ═══════════════════════════════════════════════════════════════════════
 // HELPERS
@@ -72,13 +74,11 @@ function flattenTree(nodes: TreeNodeData[]): FlatTreeRow[] {
 // ═══════════════════════════════════════════════════════════════════════
 
 interface Props {
-	/** Notify parent when user switches to a checkpoint */
-	onNodeSwitch?: (checkpointId: string) => void
 	/** Explicit terminal row count for height lock — use integer, not '100%' */
 	height?: number
 }
 
-export function ProjectTreePanel({ onNodeSwitch, height }: Props): React.ReactNode {
+export function ProjectTreePanel({ height }: Props): React.ReactNode {
 	const treeState = useCognitreeTree()
 	const flat = treeState.tree ? flattenTree(treeState.tree) : []
 	const [focusedIdx, setFocusedIdx] = useState(0)
@@ -138,14 +138,30 @@ export function ProjectTreePanel({ onNodeSwitch, height }: Props): React.ReactNo
 		setFocusedIdx((prev) => Math.min(flat.length - 1, Math.max(0, prev + delta)))
 	}
 
-	// Non-navigational actions (fallback/new/save) while focused.
+	// Real checkpoint actions (create) — same API /cognitree-checkpoint uses.
+	// Both N and S create a manual checkpoint (a save IS a new checkpoint in
+	// the Cognitree model); N seeds it from the focused node's label.
+	function createFromFocused(label: string | null): void {
+		const cwd = getCwd()
+		const cognitreeDir = path.join(cwd, '.cognitree')
+		try {
+			const result = createCheckpoint({
+				cognitreeDir,
+				projectDir: cwd,
+				prompt: label ? `Manual checkpoint from ${label}` : 'Manual checkpoint (tree panel)',
+			})
+			showMsg(result ? `✓ saved ${result.id}` : '✗ checkpoint failed')
+		} catch {
+			showMsg('✗ checkpoint failed')
+		}
+	}
+
+	// Non-navigational actions while focused.
 	function dispatchTreeAction(lower: string): void {
-		if (lower === 'f') {
-			if (focusedNode) showMsg(`fallback from ${focusedNode.label}…`)
-		} else if (lower === 'n') {
-			showMsg('new node from here…')
+		if (lower === 'n') {
+			createFromFocused(focusedNode?.label ?? null)
 		} else if (lower === 's') {
-			showMsg('session saved ✓')
+			createFromFocused(null)
 		}
 	}
 
@@ -167,10 +183,9 @@ export function ProjectTreePanel({ onNodeSwitch, height }: Props): React.ReactNo
 			return
 		}
 		if (key.return) {
-			if (focusedNode) {
-				onNodeSwitch?.(focusedNode.id)
-				showMsg(`→ ${focusedNode.label}`)
-			}
+			// No in-UI checkpoint switch exists yet — point users at the
+			// command instead of pretending the jump happened.
+			showMsg('switch: use /cognitree-branch <name>')
 			return
 		}
 		dispatchTreeAction(input.toLowerCase())
@@ -201,13 +216,12 @@ export function ProjectTreePanel({ onNodeSwitch, height }: Props): React.ReactNo
 	})
 
 	// Clicking a tree row (fullscreen mouse tracking) moves focus to it.
-	// Clicking the already-focused row jumps to that checkpoint — same as Enter.
+	// Clicking the already-focused row shows the switch hint — same as Enter.
 	function handleNodeClick(id: string): void {
 		const idx = flat.findIndex((row) => row.node.id === id)
 		if (idx < 0) return
 		if (idx === focusedIdx && focusedNode) {
-			onNodeSwitch?.(focusedNode.id)
-			showMsg(`→ ${focusedNode.label}`)
+			showMsg('switch: use /cognitree-branch <name>')
 			return
 		}
 		setIsFocused(true)
@@ -372,14 +386,10 @@ export function ProjectTreePanel({ onNodeSwitch, height }: Props): React.ReactNo
 				<Box flexDirection="row">
 					<Text color="subtle">[^T] Focus </Text>
 					<Text color="subtle">[↑↓] Nav </Text>
-					<Text color="subtle">[↵] Jump</Text>
-				</Box>
-				<Box flexDirection="row">
-					<Text color="subtle">[F] Back </Text>
-					<Text color="subtle">[N] New </Text>
 					<Text color="subtle">[Esc] Exit</Text>
 				</Box>
 				<Box flexDirection="row">
+					<Text color="subtle">[N] New cp </Text>
 					<Text color="subtle">[S] Save </Text>
 					<Text color="claude">{treeState.totalCheckpoints} cp</Text>
 				</Box>

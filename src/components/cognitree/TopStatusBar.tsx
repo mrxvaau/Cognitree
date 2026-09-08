@@ -27,7 +27,6 @@ function formatTime(date: Date): string {
 	return date.toLocaleTimeString('en-US', {
 		hour: '2-digit',
 		minute: '2-digit',
-		second: '2-digit',
 	})
 }
 
@@ -38,11 +37,12 @@ function formatTime(date: Date): string {
 export function TopStatusBar(): React.ReactNode {
 	const model = useMainLoopModel()
 	const { activeBranch } = useCognitreeTree()
+	// Minute-resolution clock, ticked every 30s: re-renders this bar at most
+	// twice a minute instead of every second (A12 chrome-flicker fix).
 	const [now, setNow] = useState(() => new Date())
 
-	// Update clock every second
 	useEffect(() => {
-		const timer = setInterval(() => setNow(new Date()), 1000)
+		const timer = setInterval(() => setNow(new Date()), 30_000)
 		return () => clearInterval(timer)
 	}, [])
 
@@ -88,7 +88,7 @@ export function TopStatusBar(): React.ReactNode {
 			<Box flexGrow={1} />
 
 			{/* Clock */}
-			<Text color="inactive">⏰ {timeStr} </Text>
+			<Text color="inactive">◷ {timeStr} </Text>
 		</Box>
 	)
 }

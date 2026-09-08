@@ -27,15 +27,12 @@ function formatTokens(n: number): string {
 }
 
 function formatUptime(startMs: number): string {
-	const elapsed = Math.floor((Date.now() - startMs) / 1000)
-	const h = Math.floor(elapsed / 3600)
-		.toString()
-		.padStart(2, '0')
-	const m = Math.floor((elapsed % 3600) / 60)
-		.toString()
-		.padStart(2, '0')
-	const s = (elapsed % 60).toString().padStart(2, '0')
-	return `${h}:${m}:${s}`
+	// Minute resolution: the row re-renders every 30s, not every second
+	// (A12 chrome-flicker fix), so seconds would visibly skip.
+	const elapsed = Math.floor((Date.now() - startMs) / 60_000)
+	const h = Math.floor(elapsed / 60).toString().padStart(2, '0')
+	const m = (elapsed % 60).toString().padStart(2, '0')
+	return `${h}:${m}`
 }
 
 function truncatePath(p: string, maxLen: number): string {
@@ -96,11 +93,11 @@ const SESSION_START = Date.now()
 export function StatsRow(): React.ReactNode {
 	const model = useMainLoopModel()
 	const { activeBranch, activeCheckpointId } = useCognitreeTree()
+	// 30s tick for the minute-resolution uptime (A12: no more 1s chrome repaints)
 	const [, setTick] = useState(0)
 
-	// Re-render every second for uptime counter
 	useEffect(() => {
-		const t = setInterval(() => setTick((n) => n + 1), 1000)
+		const t = setInterval(() => setTick((n) => n + 1), 30_000)
 		return () => clearInterval(t)
 	}, [])
 
@@ -114,10 +111,10 @@ export function StatsRow(): React.ReactNode {
 
 	return (
 		<Box flexDirection="row" paddingX={1} paddingY={0}>
-			<StatCard icon="🤖" label="Model" value={modelShort} valueColor="claude" />
-			<StatCard icon="📁" label="Working Dir" value={dirShort} valueColor="text" />
-			<StatCard icon="◈" label="Active Node" value={activeLabel} valueColor="claude" />
-			<StatCard icon="📊" label="Tokens Used" value={tokensStr} valueColor="text" />
+			<StatCard icon="◈" label="Model" value={modelShort} valueColor="claude" />
+			<StatCard icon="▸" label="Working Dir" value={dirShort} valueColor="text" />
+			<StatCard icon="●" label="Active Node" value={activeLabel} valueColor="claude" />
+			<StatCard icon="∑" label="Tokens Used" value={tokensStr} valueColor="text" />
 			{/* Last card — no marginRight */}
 			<ThemedBox
 				flexDirection="column"
@@ -128,7 +125,7 @@ export function StatsRow(): React.ReactNode {
 				flexGrow={1}
 			>
 				<Box flexDirection="row">
-					<Text color="suggestion">⏱ </Text>
+					<Text color="suggestion">◷ </Text>
 					<Text color="inactive">Uptime</Text>
 				</Box>
 				<Text color="text" bold>
