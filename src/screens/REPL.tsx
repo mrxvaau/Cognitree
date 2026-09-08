@@ -154,7 +154,8 @@ import { useMergedCommands } from '../hooks/useMergedCommands.js';
 import { useSkillsChange } from '../hooks/useSkillsChange.js';
 import { useManagePlugins } from '../hooks/useManagePlugins.js';
 import { Messages } from '../components/Messages.js';
-import { CognitreeLayout } from '../components/cognitree/CognitreeLayout.js';
+import { TopStatusBar } from '../components/cognitree/TopStatusBar.js';
+import { StatsRow } from '../components/cognitree/StatsRow.js';
 import { TaskListV2 } from '../components/TaskListV2.js';
 import { TeammateViewHeader } from '../components/TeammateViewHeader.js';
 import { useTasksV2WithCollapseEffect } from '../hooks/useTasksV2.js';
@@ -5007,6 +5008,12 @@ export function REPL({
   // Yoga's tree, "100%" resolves to content height, not terminal height.
   // We use an integer + a resize listener instead.
   const TREE_PANEL_WIDTH = 34;
+  // Vertical chrome above the chat: TopStatusBar (1 content row + 1 bottom
+  // border) + StatsRow (border + label + value + border). FullscreenLayout
+  // sizes its ScrollBox/modals from useTerminalSize(), so this MUST be
+  // subtracted from the rows we feed it or the chat will claim the full
+  // column height and push chrome/prompt off-screen.
+  const CHROME_ROWS = 6;
   const [terminalRows, setTerminalRows] = React.useState<number>(
     process.stdout?.rows ?? 24
   );
@@ -5038,7 +5045,13 @@ export function REPL({
         height={terminalRows}
         overflow="hidden"
       >
-        <TerminalSizeContext value={termSize}>
+        {/* Status chrome above the chat, sized against the REAL terminal
+            width (outside the TerminalSizeContext override) so the status
+            bar spans the full right column. The chat below compensates
+            rows for the chrome height via the context. */}
+        <TopStatusBar />
+        <StatsRow />
+        <TerminalSizeContext value={{ ...termSize, rows: Math.max(3, termSize.rows - CHROME_ROWS) }}>
           {mainReturn}
         </TerminalSizeContext>
       </Box>
