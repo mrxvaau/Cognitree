@@ -41,16 +41,29 @@ const FIXED_ROWS = 10
 // HELPERS
 // ═══════════════════════════════════════════════════════════════════════
 
-/** Flatten tree into a stable ordered list for keyboard navigation */
-function flattenTree(nodes: TreeNodeData[]): TreeNodeData[] {
-	const result: TreeNodeData[] = []
-	function walk(list: TreeNodeData[]): void {
-		for (const n of list) {
-			result.push(n)
-			walk(n.children)
+/** A flattened tree row: the node plus the branch metadata needed to draw
+ *  true tree connectors (└─/├─/│) in the windowed flat render. */
+export interface FlatTreeRow {
+	node: TreeNodeData
+	/** Per ancestor level: does that ancestor have a following sibling? (│ rail) */
+	prefixFlags: boolean[]
+	/** Is this node the last child of its parent? (└─ vs ├─) */
+	isLast: boolean
+}
+
+/** Flatten tree into a stable ordered list for keyboard navigation,
+ *  deriving real connector flags so branch glyphs render correctly. */
+function flattenTree(nodes: TreeNodeData[]): FlatTreeRow[] {
+	const result: FlatTreeRow[] = []
+	function walk(list: TreeNodeData[], prefixFlags: boolean[]): void {
+		for (let i = 0; i < list.length; i++) {
+			const isLast = i === list.length - 1
+			result.push({ node: list[i], prefixFlags, isLast })
+			// Children see a │ rail at this level while this node has siblings below it.
+			walk(list[i].children, [...prefixFlags, !isLast])
 		}
 	}
-	walk(nodes)
+	walk(nodes, [])
 	return result
 }
 
@@ -94,7 +107,7 @@ export function ProjectTreePanel({ onNodeSwitch, height }: Props): React.ReactNo
 	useEffect(() => {
 		if (!treeState.isLoaded) return
 		if (initialFocusSetRef.current) return // already positioned — don't chase new checkpoints
-		const activeIdx = flat.findIndex((n) => n.isActive)
+		const activeIdx = flat.findIndex((row) => row.node.isActive)
 		if (activeIdx >= 0) {
 			setFocusedIdx(activeIdx)
 			// Scroll window so the active node is centered in the visible area
@@ -118,7 +131,7 @@ export function ProjectTreePanel({ onNodeSwitch, height }: Props): React.ReactNo
 		msgTimerRef.current = setTimeout(() => setMessage(null), 2000)
 	}
 
-	const focusedNode = flat[focusedIdx] ?? null
+	const focusedNode = flat[focusedIdx]?.node ?? null
 
 	// Move focus up/down with bounds clamping.
 	function moveFocus(delta: 1 | -1): void {
@@ -190,7 +203,7 @@ export function ProjectTreePanel({ onNodeSwitch, height }: Props): React.ReactNo
 	// Clicking a tree row (fullscreen mouse tracking) moves focus to it.
 	// Clicking the already-focused row jumps to that checkpoint — same as Enter.
 	function handleNodeClick(id: string): void {
-		const idx = flat.findIndex((n) => n.id === id)
+		const idx = flat.findIndex((row) => row.node.id === id)
 		if (idx < 0) return
 		if (idx === focusedIdx && focusedNode) {
 			onNodeSwitch?.(focusedNode.id)
@@ -312,16 +325,16 @@ export function ProjectTreePanel({ onNodeSwitch, height }: Props): React.ReactNo
 
 			{/* ── Tree nodes — WINDOWED: only visibleRows nodes are in the Yoga tree ── */}
 			<Box flexDirection="column" flexShrink={0} paddingX={1}>
-				{visibleFlat.map((node) => {
-					// Render each flat node as a shallow TreeNode (no children) so the
-					// flat list controls ordering and we avoid recursive double-rendering.
-					const shallowNode = { ...node, children: [] }
+				{visibleFlat.map((row) => {
+					// Shallow node (children stripped): the flat list controls
+					// ordering, and real prefixFlags/isLast restore └─/├─/│ glyphs.
+					const shallowNode = { ...row.node, children: [] }
 					return (
 						<TreeNode
-							key={node.id}
+							key={row.node.id}
 							node={shallowNode}
-							prefixFlags={Array(node.depth).fill(false)}
-							isLast={false}
+							prefixFlags={row.prefixFlags}
+							isLast={row.isLast}
 							panelWidth={PANEL_WIDTH}
 							focusedId={isFocused ? (focusedNode?.id ?? null) : null}
 							onSelect={handleNodeClick}
