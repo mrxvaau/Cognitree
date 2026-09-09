@@ -164,8 +164,19 @@ export class LogUpdate {
     // render-node-to-output's blit+shift is correct either way.
     let scrollPatch: Diff = []
     if (altScreen && next.scrollHint && decstbmSafe) {
-      const { top, bottom, delta } = next.scrollHint
+      const { top, bottom, delta, left, right, screenWidth } = next.scrollHint
+      // Hardware scrolls (DECSTBM) move FULL terminal rows — there is no
+      // column-scoped scroll. Only emit when the ScrollBox spans the entire
+      // screen width. With a fixed sibling sharing those rows (e.g. the
+      // Cognitree tree sidebar), a hardware scroll would physically drag the
+      // sibling's cells; the in-memory shiftRows sim would then make the diff
+      // see the corrupted state as "unchanged", so the sidebar never gets
+      // repainted — streamed chat content bleeds across it until a full
+      // reset. Falling through to the diff loop instead repaints the scrolled
+      // rows cell-by-cell, which is correct in the presence of any sibling.
+      const isFullWidth = left <= 0 && right >= screenWidth
       if (
+        isFullWidth &&
         top >= 0 &&
         bottom < prev.screen.height &&
         bottom < next.screen.height

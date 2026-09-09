@@ -45,8 +45,20 @@ export function didLayoutShift(): boolean {
 // between frames (and nothing else moved), log-update.ts can emit a
 // hardware scroll (DECSTBM + SU/SD) instead of rewriting the whole
 // viewport. top/bottom are 0-indexed inclusive screen rows; delta > 0 =
-// content moved up (scrollTop increased, CSI n S).
-export type ScrollHint = { top: number; bottom: number; delta: number }
+// content moved up (scrollTop increased, CSI n S). left/right are the
+// ScrollBox's column range: terminal scroll regions span the FULL width,
+// so the hint is only usable when the box covers every column (x=0 to
+// screen width) — with a fixed sibling (e.g. a sidebar) sharing those
+// rows, a hardware scroll would drag the sibling's cells along and the
+// in-memory shiftRows sim makes the diff believe nothing changed.
+export type ScrollHint = {
+  top: number
+  bottom: number
+  delta: number
+  left: number
+  right: number
+  screenWidth: number
+}
 let scrollHint: ScrollHint | null = null
 
 // Rects of position:absolute nodes from the PREVIOUS frame, used by
@@ -876,7 +888,16 @@ function renderNodeToOutput(
               innerHeight > 0 &&
               Math.abs(delta) < innerHeight
             ) {
-              hint = { top: regionTop, bottom: regionBottom, delta }
+              const boxLeft = Math.floor(x)
+              const boxRight = Math.floor(x + width)
+              hint = {
+                top: regionTop,
+                bottom: regionBottom,
+                delta,
+                left: boxLeft,
+                right: boxRight,
+                screenWidth: output.width,
+              }
               scrollHint = hint
             } else {
               layoutShifted = true
