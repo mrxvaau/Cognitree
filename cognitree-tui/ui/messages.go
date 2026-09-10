@@ -30,8 +30,8 @@ func RenderMessages(msgs []model.ChatMessage, streamBuf string, streaming bool, 
 		}
 	}
 
-	// Live streaming partial text
-	if streaming && streamBuf != "" {
+	// Live streaming partial text or thinking indicator
+	if streaming {
 		if sb.Len() > 0 {
 			sb.WriteString("\n\n")
 		}
@@ -107,6 +107,9 @@ func renderAssistant(m *model.ChatMessage, width int) string {
 
 func renderStreamingMsg(text string, width int) string {
 	label := styles.StyleAssistantLabel.Render("◆ cognitree")
+	if text == "" {
+		return label + "  " + styles.StyleStreaming.Render("● thinking...")
+	}
 	header := label + "  " + styles.StyleStreaming.Render("● generating...")
 	content := styles.StyleAssistantBubble.Render(
 		RenderMarkdown(text, width-4) + styles.StyleStreaming.Render(" ▋"),
