@@ -864,7 +864,11 @@ export async function main() {
   profileCheckpoint('main_after_run');
 }
 async function getInputPrompt(prompt: string, inputFormat: 'text' | 'stream-json'): Promise<string | AsyncIterable<string>> {
-  const stdinIsTTY = process.stdin.isTTY ?? (!!process.env.LLM_BASE_URL || false);
+  // When running under the Go TUI (COGNITREE_TUI_MODE=1), stdin is always a
+  // pipe from the Go process — never a real TTY. Override the LLM_BASE_URL
+  // fallback so stream-json input mode is selected correctly.
+  const cognitreeTuiMode = !!process.env.COGNITREE_TUI_MODE;
+  const stdinIsTTY = cognitreeTuiMode ? false : (process.stdin.isTTY ?? (!!process.env.LLM_BASE_URL || false));
   if (!stdinIsTTY &&
   // Input hijacking breaks MCP.
   !process.argv.includes('mcp')) {
