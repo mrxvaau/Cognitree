@@ -235,8 +235,10 @@ func (a App) handleKey(msg tea.KeyMsg, cmds *[]tea.Cmd) (tea.Model, tea.Cmd) {
 				a.state.SlashSelected++
 			}
 			return a, nil
-		case "tab", "enter":
-			return a.acceptSlash()
+		case "tab":
+			return a.acceptSlash("tab")
+		case "enter":
+			return a.acceptSlash("enter")
 		case "esc":
 			a.state.InputMode = model.ModeNormal
 			a.state.SlashMatches = nil
@@ -413,11 +415,15 @@ func (a App) applySlashResult(r slash.CommandResult, originalText string) (tea.M
 	return a, nil
 }
 
-func (a App) acceptSlash() (tea.Model, tea.Cmd) {
+func (a App) acceptSlash(key string) (tea.Model, tea.Cmd) {
 	if len(a.state.SlashMatches) == 0 {
 		return a, nil
 	}
 	sel := a.state.SlashMatches[a.state.SlashSelected]
+	if key == "enter" {
+		a.state.Input.SetValue("/" + sel.Name)
+		return a.submitInput()
+	}
 	a.state.Input.SetValue("/" + sel.Name + " ")
 	a.state.InputMode = model.ModeNormal
 	a.state.SlashMatches = nil
