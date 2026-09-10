@@ -312,6 +312,39 @@ var (
 				Foreground(lipgloss.Color(ColMuted)).
 				Italic(true)
 
+	// ── Welcome Screen v2 (OpenCode-style minimal) ───────────────────────────
+	StyleWelcomeLogoWhite = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColFg)).
+			Bold(true)
+
+	StyleWelcomeLogoGreen = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColBrand)).
+			Bold(true)
+
+	StyleWelcomeInputBox = lipgloss.NewStyle().
+			Background(lipgloss.Color(ColBgElevate)).
+			BorderLeft(true).
+			BorderStyle(lipgloss.ThickBorder()).
+			BorderForeground(lipgloss.Color(ColBrand)).
+			PaddingLeft(2).
+			PaddingRight(2).
+			PaddingTop(1).
+			PaddingBottom(1)
+
+	StyleWelcomeKeyBold = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColFg)).
+			Bold(true)
+
+	StyleWelcomeKeyMuted = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColMuted))
+
+	StyleWelcomeTipGreen = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColBrand)).
+			Bold(true)
+
+	StyleWelcomeTipMuted = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColSubtext))
+
 	// ── Context Visualization Grid / Legend ──────────────────────────────────
 	StyleContextFilled = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(ColBrand))

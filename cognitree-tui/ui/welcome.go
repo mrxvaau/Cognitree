@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -14,30 +12,38 @@ import (
 	"cognitree-tui/styles"
 )
 
-// RenderWelcome returns the full CondensedLogo welcome screen for an empty conversation.
+// RenderWelcome renders a minimal OpenCode-style welcome screen:
+//
+//	[logo: "cogni" white + "tree" green, large]
+//	[subtitle: YOUR CODING PARTNER THAT REMEMBERS]
+//	[empty]
+//	[input preview box: left green border, dark bg]
+//	[empty]
+//	[keybindings: right-aligned]
+//	[tip: centered]
 func RenderWelcome(s *model.State) string {
 	if s.Width <= 0 {
 		return ""
 	}
 
-	width := s.Width - 6
-	if width > 75 {
-		width = 75
+	// ── Box width: ~60% of terminal, clamped ─────────────────────────────────
+	boxWidth := (s.Width * 60) / 100
+	if boxWidth > 72 {
+		boxWidth = 72
 	}
-	if width < 34 {
-		width = 34
+	if boxWidth < 40 {
+		boxWidth = 40
 	}
 
-	// ── Clawd ASCII Mascot ────────────────────────────────────────────────────
-	clawdArt := "  ▐▛███▜▌\n▝▜█████▛▘\n  ▜██▜"
-	clawd := styles.StyleWelcomeLogo.Render(clawdArt)
+	// ── 1. Logo — "cogni" white bold + "tree" green bold ─────────────────────
+	cogni := styles.StyleWelcomeLogoWhite.Render("cogni")
+	tree := styles.StyleWelcomeLogoGreen.Render("tree")
+	logo := cogni + tree
 
-	// ── Brand Title & Tagline ──────────────────────────────────────────────────
-	brandTitle := styles.StyleWelcomeLogo.Render("✦✦✦ C O G N I T R E E ✦✦✦")
-	brandSub := styles.StyleWelcomeHint.Render("✦ Welcome back! Let's build something amazing.")
-	dividerLine := styles.StyleWelcomeLogo.Render("──────────────────────────────")
+	// ── 2. Subtitle (letter-spaced simulation) ────────────────────────────────
+	subtitle := styles.StyleWelcomeKeyMuted.Render("Y O U R   C O D I N G   P A R T N E R   T H A T   R E M E M B E R S")
 
-	// ── Memory check ─────────────────────────────────────────────────────────
+	// ── 3. Memory check (silent — only show if active) ───────────────────────
 	hasMemory := false
 	cwd := s.Session.Cwd
 	if cwd == "" {
@@ -51,70 +57,98 @@ func RenderWelcome(s *model.State) string {
 		hasMemory = true
 	}
 
-	var memStr string
-	if hasMemory {
-		memStr = styles.StyleSuccess.Render("✓ active")
-	} else {
-		memStr = styles.StyleMuted.Render("✗ none (try /cognitree-init)")
-	}
-
-	// ── Session Info ──────────────────────────────────────────────────────────
-	timeStr := time.Now().Format("Jan 2, 2006 · 3:04 PM")
+	// ── 4. Model name ─────────────────────────────────────────────────────────
 	modelName := s.Session.ModelName
-	if modelName == "" {
-		modelName = "z-ai/glm-5.3-free"
+	if modelName == "" || modelName == "..." {
+		modelName = "connecting…"
 	}
 
-	makeDivider := func(title string) string {
-		rem := width - len(title) - 8
-		if rem < 4 {
-			rem = 4
-		}
-		return fmt.Sprintf("── %s %s", title, strings.Repeat("─", rem))
+	// ── 5. Input preview box ──────────────────────────────────────────────────
+	placeholderLine := styles.StyleWelcomeKeyMuted.Render("Ask anything…")
+
+	buildLabel := styles.StyleWelcomeLogoGreen.Render("Build")
+	dot := styles.StyleWelcomeKeyMuted.Render("·")
+	modelLabel := styles.StyleWelcomeLogoWhite.Render(modelName)
+	engineLabel := styles.StyleWelcomeKeyMuted.Render("Experimental Labs")
+	metaLine := fmt.Sprintf("%s %s %s   %s", buildLabel, dot, modelLabel, engineLabel)
+
+	if hasMemory {
+		memBadge := styles.StyleWelcomeLogoGreen.Render("● memory active")
+		metaLine = metaLine + "   " + memBadge
 	}
 
-	sessionDiv := styles.StyleWelcomeLogo.Render(makeDivider("◈ Session"))
-	sessionContent := fmt.Sprintf(
-		"  %s %s %s\n  %s %s %s %s\n  %s %s %s\n  %s %s %s",
-		styles.StyleWelcomeLogo.Render("◷"), styles.StyleSubtext.Render("Time  "), timeStr,
-		styles.StyleWelcomeLogo.Render("◈"), styles.StyleSubtext.Render("Model "), styles.StyleWelcomeLogo.Render(modelName), styles.StyleMuted.Render("· api"),
-		styles.StyleWelcomeLogo.Render("▸"), styles.StyleSubtext.Render("Dir   "), cwd,
-		styles.StyleWelcomeLogo.Render("⬤"), styles.StyleSubtext.Render("Memory"), memStr,
+	// inner content of box: placeholder + blank + meta
+	boxInner := lipgloss.JoinVertical(
+		lipgloss.Left,
+		placeholderLine,
+		"",
+		metaLine,
 	)
 
-	// ── System Info (if height >= 26) ─────────────────────────────────────────
-	systemSec := ""
-	if s.Height >= 26 {
-		sysDiv := styles.StyleWelcomeLogo.Render(makeDivider("■ System"))
-		sysContent := fmt.Sprintf(
-			"  %s %s %s (%d cores)\n  %s %s %s\n  %s %s %s",
-			styles.StyleWelcomeLogo.Render("⚡"), styles.StyleSubtext.Render("CPU   "), runtime.GOARCH, runtime.NumCPU(),
-			styles.StyleWelcomeLogo.Render("⬦"), styles.StyleSubtext.Render("OS    "), runtime.GOOS,
-			styles.StyleWelcomeLogo.Render("▫"), styles.StyleSubtext.Render("Engine"), "Go TUI v1.0.0",
-		)
-		systemSec = "\n" + sysDiv + "\n" + sysContent
+	// Render box: left-only thick green border, dark bg, width-constrained
+	// We set inner width = boxWidth minus the left border (1) and padding (2+2)
+	innerWidth := boxWidth - 5
+	if innerWidth < 20 {
+		innerWidth = 20
 	}
 
-	// ── Combine Inner Sections ────────────────────────────────────────────────
-	headerBox := lipgloss.JoinVertical(
-		lipgloss.Center,
-		clawd,
-		"",
-		brandTitle,
-		dividerLine,
-		brandSub,
-		"",
+	inputBox := styles.StyleWelcomeInputBox.
+		Width(innerWidth).
+		Render(boxInner)
+
+	// ── 6. Keybindings row (right-aligned to boxWidth) ────────────────────────
+	kb := fmt.Sprintf("%s%s   %s%s   %s%s",
+		styles.StyleWelcomeKeyBold.Render("tab"),
+		styles.StyleWelcomeKeyMuted.Render(" agents"),
+		styles.StyleWelcomeKeyBold.Render("ctrl+p"),
+		styles.StyleWelcomeKeyMuted.Render(" commands"),
+		styles.StyleWelcomeKeyBold.Render("ctrl+s"),
+		styles.StyleWelcomeKeyMuted.Render(" settings"),
 	)
-	inner := headerBox + "\n" + sessionDiv + "\n" + sessionContent + systemSec
+	keybindings := lipgloss.NewStyle().
+		Width(boxWidth).
+		Align(lipgloss.Right).
+		Render(kb)
 
-	welcomeBox := styles.StyleWelcomeBox.
-		Width(width).
-		Render(inner)
+	// ── 7. Tip row (centered to boxWidth) ────────────────────────────────────
+	tip := fmt.Sprintf("%s  %s  %s",
+		styles.StyleWelcomeLogoGreen.Render("●"),
+		styles.StyleWelcomeTipGreen.Render("Tip"),
+		styles.StyleWelcomeTipMuted.Render("Use /help to see available commands"),
+	)
+	tipRow := lipgloss.NewStyle().
+		Width(boxWidth).
+		Align(lipgloss.Center).
+		Render(tip)
 
-	// Pad vertically to center in upper third of terminal
-	lines := strings.Split(welcomeBox, "\n")
-	boxHeight := len(lines)
-	topPad := (s.Height - boxHeight) / 3
+	// ── 8. Center each element horizontally in the terminal ──────────────────
+	centerStyle := lipgloss.NewStyle().Width(s.Width).Align(lipgloss.Center)
+	rightStyle := lipgloss.NewStyle().Width(s.Width).Align(lipgloss.Center)
+
+	centeredLogo := centerStyle.Render(logo)
+	centeredSubtitle := centerStyle.Render(subtitle)
+	centeredBox := centerStyle.Render(inputBox)
+	centeredKeys := rightStyle.Render(keybindings)
+	centeredTip := centerStyle.Render(tipRow)
+
+	// ── 9. Stack elements ────────────────────────────────────────────────────
+	stacked := strings.Join([]string{
+		centeredLogo,
+		centeredSubtitle,
+		"",
+		"",
+		centeredBox,
+		"",
+		centeredKeys,
+	}, "\n")
+
+	// ── 10. Vertical centering (upper third) ─────────────────────────────────
+	contentLines := strings.Split(stacked, "\n")
+	contentHeight := len(contentLines)
+
+	// reserve 3 rows at bottom for tip + breathing room
+	availH := s.Height - 4
+	topPad := (availH - contentHeight) / 3
 	if topPad < 0 {
 		topPad = 0
 	}
@@ -123,6 +157,10 @@ func RenderWelcome(s *model.State) string {
 	for i := 0; i < topPad; i++ {
 		out.WriteByte('\n')
 	}
-	out.WriteString(welcomeBox)
+	out.WriteString(stacked)
+	// tip pinned near bottom with some gap
+	out.WriteString("\n\n")
+	out.WriteString(centeredTip)
+
 	return out.String()
 }
