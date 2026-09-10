@@ -13,10 +13,14 @@ import (
 
 // EvtSessionInit — backend sent system:init (session start metadata).
 type EvtSessionInit struct {
-	SessionID string
-	Model     string
-	Cwd       string
-	Version   string
+	SessionID     string
+	Model         string
+	Cwd           string
+	Version       string
+	SlashCommands []string
+	Skills        []string
+	Tools         []string
+	Agents        []string
 }
 
 // EvtStatusMsg — backend sent system:status (transient status string).
@@ -86,10 +90,14 @@ func Dispatch(line string) (interface{}, error) {
 				return EvtParseError{Line: line, Err: err}, nil
 			}
 			return EvtSessionInit{
-				SessionID: msg.SessionID,
-				Model:     msg.Model,
-				Cwd:       msg.Cwd,
-				Version:   msg.Version,
+				SessionID:     msg.SessionID,
+				Model:         msg.Model,
+				Cwd:           msg.Cwd,
+				Version:       msg.Version,
+				SlashCommands: msg.SlashCommands,
+				Skills:        msg.Skills,
+				Tools:         msg.Tools,
+				Agents:        msg.Agents,
 			}, nil
 
 		case "status":

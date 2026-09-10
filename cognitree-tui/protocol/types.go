@@ -68,12 +68,16 @@ type Envelope struct {
 
 // SystemInit is received on startup with session metadata.
 type SystemInit struct {
-	Type      string `json:"type"`    // "system"
-	Subtype   string `json:"subtype"` // "init"
-	SessionID string `json:"session_id"`
-	Model     string `json:"model"`
-	Cwd       string `json:"cwd"`
-	Version   string `json:"version"`
+	Type          string   `json:"type"`    // "system"
+	Subtype       string   `json:"subtype"` // "init"
+	SessionID     string   `json:"session_id"`
+	Model         string   `json:"model"`
+	Cwd           string   `json:"cwd"`
+	Version       string   `json:"version"`
+	SlashCommands []string `json:"slash_commands"`
+	Skills        []string `json:"skills"`
+	Tools         []string `json:"tools"`
+	Agents        []string `json:"agents"`
 }
 
 // SystemStatus carries ephemeral status updates.

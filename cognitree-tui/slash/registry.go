@@ -87,6 +87,63 @@ func (r *Registry) Find(name string) (Command, bool) {
 	return Command{}, false
 }
 
+// RegisterDynamicCommands dynamically registers all backend commands and skills.
+func (r *Registry) RegisterDynamicCommands(names []string) {
+	existing := make(map[string]bool)
+	for _, c := range r.commands {
+		existing[strings.ToLower(c.Name)] = true
+		for _, a := range c.Aliases {
+			existing[strings.ToLower(a)] = true
+		}
+	}
+
+	for _, rawName := range names {
+		name := strings.TrimSpace(strings.TrimPrefix(rawName, "/"))
+		if name == "" || existing[strings.ToLower(name)] {
+			continue
+		}
+		r.commands = append(r.commands, Command{
+			Name:        name,
+			Description: commandDesc(name),
+			Builtin:     false,
+		})
+		existing[strings.ToLower(name)] = true
+	}
+}
+
+func commandDesc(name string) string {
+	switch name {
+	case "update-config":
+		return "Update configuration settings"
+	case "debug":
+		return "Run debug diagnostics"
+	case "simplify":
+		return "Simplify codebase or recent refactors"
+	case "batch":
+		return "Execute batch commands"
+	case "cognitree-status":
+		return "Show Cognitree project status"
+	case "cognitree-checkpoint":
+		return "Create a conversation checkpoint"
+	case "cognitree-branch":
+		return "Manage Git branch for Cognitree"
+	case "cognitree-init":
+		return "Initialize Cognitree configuration"
+	case "insights":
+		return "Show codebase analytics and insights"
+	case "pr-comments":
+		return "Fetch or post PR review comments"
+	case "release-notes":
+		return "Generate release notes"
+	case "security-review":
+		return "Run security audit & review"
+	case "x402":
+		return "Execute workspace action"
+	default:
+		return "Backend command / " + name
+	}
+}
+
 // All returns all registered commands.
 func (r *Registry) All() []Command {
 	return r.commands

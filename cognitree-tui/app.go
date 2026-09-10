@@ -114,6 +114,12 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		a.state.Session.Cwd = msg.Cwd
 		a.state.Session.Version = msg.Version
+		if len(msg.SlashCommands) > 0 {
+			a.slashReg.RegisterDynamicCommands(msg.SlashCommands)
+		}
+		if len(msg.Skills) > 0 {
+			a.slashReg.RegisterDynamicCommands(msg.Skills)
+		}
 		return a, nil
 
 	case protocol.EvtStatusMsg:
