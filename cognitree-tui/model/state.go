@@ -24,6 +24,13 @@ type PermissionPrompt struct {
 	InputJSON string
 }
 
+// ─── Add Directory Modal ──────────────────────────────────────────────────────
+
+type AddDirModal struct {
+	Path     string
+	Remember bool // false: session-only, true: save to local settings
+}
+
 // ─── Session Metadata ─────────────────────────────────────────────────────────
 
 type Session struct {
@@ -88,8 +95,9 @@ type State struct {
 	SlashSelected int
 
 	// ── Tool Permission ───────────────────────────────────────────────────
-	PendingPerm *PermissionPrompt
-	AlwaysAllow map[string]bool
+	PendingPerm   *PermissionPrompt
+	PendingAddDir *AddDirModal
+	AlwaysAllow   map[string]bool
 
 	// ── Context Visualization Panel ────────────────────────────────────────
 	Context     *ContextInfo
@@ -142,7 +150,7 @@ func NewState() State {
 }
 
 func (s *State) IsIdle() bool {
-	return !s.Streaming && s.PendingPerm == nil
+	return !s.Streaming && s.PendingPerm == nil && s.PendingAddDir == nil
 }
 
 func (s *State) HasMessages() bool {

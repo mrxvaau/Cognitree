@@ -228,6 +228,9 @@ func (a App) handleKey(msg tea.KeyMsg, cmds *[]tea.Cmd) (tea.Model, tea.Cmd) {
 	if a.state.PendingPerm != nil {
 		return a.handlePermKey(msg)
 	}
+	if a.state.PendingAddDir != nil {
+		return a.handleAddDirKey(msg)
+	}
 
 	// Slash overlay navigation
 	if a.state.InputMode == model.ModeSlash && len(a.state.SlashMatches) > 0 {
@@ -340,6 +343,55 @@ func (a App) handlePermKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
+// ─── Add Dir key handler ───────────────────────────────────────────────────────
+
+func (a App) handleAddDirKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m := a.state.PendingAddDir
+	switch msg.String() {
+	case "esc":
+		a.state.PendingAddDir = nil
+		a.state.Messages = append(a.state.Messages,
+			model.NewSystemMsg("Cancelled adding working directory.", ""),
+		)
+		a.refreshViewport()
+		return a, nil
+
+	case "tab", "up", "down":
+		m.Remember = !m.Remember
+		return a, nil
+
+	case "enter":
+		path := strings.TrimSpace(m.Path)
+		if path == "" {
+			return a, nil
+		}
+		a.state.PendingAddDir = nil
+		cmdText := fmt.Sprintf("/add-dir %s", path)
+		a.state.Messages = append(a.state.Messages, model.NewUserMsg(cmdText))
+		a.refreshViewport()
+		a.state.Viewport.GotoBottom()
+		a.state.Streaming = true
+		_ = a.back.SendUserMessage(cmdText)
+		return a, nil
+
+	case "backspace":
+		if len(m.Path) > 0 {
+			m.Path = m.Path[:len(m.Path)-1]
+		}
+		return a, nil
+
+	default:
+		if msg.String() == "space" {
+			m.Path += " "
+			return a, nil
+		}
+		if len(msg.Runes) > 0 {
+			m.Path += string(msg.Runes)
+		}
+		return a, nil
+	}
+}
+
 // ─── Submit message ───────────────────────────────────────────────────────────
 
 func (a App) submitInput() (tea.Model, tea.Cmd) {
@@ -356,6 +408,10 @@ func (a App) submitInput() (tea.Model, tea.Cmd) {
 
 	if strings.HasPrefix(text, "/") {
 		name, args := slash.Parse(text)
+		if name == "add-dir" && strings.TrimSpace(args) == "" {
+			a.state.PendingAddDir = &model.AddDirModal{Path: "", Remember: false}
+			return a, nil
+		}
 		if cmd, ok := a.slashReg.Find(name); ok && cmd.Builtin {
 			result := cmd.Handler(args)
 			return a.applySlashResult(result, text)

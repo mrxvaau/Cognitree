@@ -44,6 +44,9 @@ func RenderLayout(s *model.State, viewportContent string) string {
 	// ── 4. Permission dialog ──────────────────────────────────────────────────
 	permDialog := RenderPermissionDialog(s)
 
+	// ── 4b. Add Directory dialog ──────────────────────────────────────────────
+	addDirDialog := RenderAddDirDialog(s)
+
 	// ── 5. Input bar ──────────────────────────────────────────────────────────
 	inputHint := buildInputHint(s)
 	inputBar := s.Input.View()
@@ -63,6 +66,10 @@ func RenderLayout(s *model.State, viewportContent string) string {
 	}
 	if permDialog != "" {
 		sb.WriteString(permDialog)
+		sb.WriteByte('\n')
+	}
+	if addDirDialog != "" {
+		sb.WriteString(addDirDialog)
 		sb.WriteByte('\n')
 	}
 	if inputHint != "" {
