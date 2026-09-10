@@ -110,6 +110,10 @@ export async function call(onDone: LocalJSXCommandOnDone, context: LocalJSXComma
   // When no path is provided, show AddWorkspaceDirectory input form directly
   // and return to REPL after confirmation
   if (!directoryPath) {
+    if (context.options.isNonInteractiveSession) {
+      onDone('Usage: /add-dir <path>');
+      return null;
+    }
     return <AddWorkspaceDirectory permissionContext={appState.toolPermissionContext} onAddDirectory={handleAddDirectory} onCancel={() => {
       onDone('Did not add a working directory.');
     }} />;
@@ -117,7 +121,15 @@ export async function call(onDone: LocalJSXCommandOnDone, context: LocalJSXComma
   const result = await validateDirectoryForWorkspace(directoryPath, appState.toolPermissionContext);
   if (result.resultType !== 'success') {
     const message = addDirHelpMessage(result);
+    if (context.options.isNonInteractiveSession) {
+      onDone(message);
+      return null;
+    }
     return <AddDirError message={message} args={args ?? ''} onDone={() => onDone(message)} />;
+  }
+  if (context.options.isNonInteractiveSession) {
+    await handleAddDirectory(result.absolutePath, false);
+    return null;
   }
   return <AddWorkspaceDirectory directoryPath={result.absolutePath} permissionContext={appState.toolPermissionContext} onAddDirectory={handleAddDirectory} onCancel={() => {
     onDone(`Did not add ${chalk.bold(result.absolutePath)} as a working directory.`);

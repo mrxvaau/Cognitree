@@ -5,6 +5,7 @@ const addDir = {
   name: 'add-dir',
   description: 'Add a new working directory',
   argumentHint: '<path>',
+  supportsNonInteractive: true,
   load: () => import('./add-dir.js'),
 } satisfies Command
 
