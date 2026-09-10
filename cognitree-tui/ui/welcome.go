@@ -128,7 +128,17 @@ func RenderWelcome(s *model.State) string {
 
 	centeredLogo := place(logo)
 	centeredSubtitle := place(subtitle)
-	centeredBox := place(inputBox)
+	// Manual centering for inputBox — lipgloss.Width() reads visible cell width
+	// correctly even with ANSI codes, giving pixel-perfect horizontal placement.
+	var centeredBox string
+	{
+		bw := lipgloss.Width(inputBox)
+		leftPad := (s.Width - bw) / 2
+		if leftPad < 0 {
+			leftPad = 0
+		}
+		centeredBox = strings.Repeat(" ", leftPad) + inputBox
+	}
 	centeredKeys := place(keybindings)
 	centeredTip := place(tipRow)
 
