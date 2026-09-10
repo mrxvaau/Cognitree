@@ -1,0 +1,9 @@
+[mcp_servers.claude-code-explorer]
+command = "node"
+args = ["mcp-server/dist/src/index.js"]
+
+[mcp_servers.claude-code-explorer.env]
+CLAUDE_CODE_SRC_ROOT = "./mcp-server/src"
+MCP_CACHE_TTL_SECONDS = "300"
+MCP_MEMORY_FILE = "./mcp-server/CODEBASE.md"
+MCP_MODEL = "opus"

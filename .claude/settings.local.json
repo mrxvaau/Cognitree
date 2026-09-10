@@ -1,11 +1,34 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(git ls-tree:*)",
+      "Bash(git -C \"E:\\\\REPO\\\\Cognitree\\\\Cognitree\" status)",
+      "Bash(git -C \"E:\\\\REPO\\\\Cognitree\\\\Cognitree\" branch -a)",
+      "Bash(git -C \"E:\\\\REPO\\\\Cognitree\\\\Cognitree\" checkout -b feature/core-upgrade)",
+      "Bash(git show *)",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 *)",
+      "Bash(node *)",
+      "Bash(sed -E 's/\\(KEY=\\)[^ ]*/\\\\1***/g')",
+      "Bash(sed -E 's/\\(KEY|TOKEN\\)=.+/\\\\1=***/')",
+      "Bash(bun run *)",
+      "Bash(npx vitest *)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(bunx tsc *)",
+      "Bash(git stash *)",
+      "Bash(bun scripts/build-bundle.ts)",
+      "Bash(bun dist/cli.mjs --version)",
+      "Bash(env)",
+      "Bash(bun tmp_check/mock_gateway.ts)",
+      "Bash(curl -s -X POST http://localhost:8931/v1/chat/completions)",
+      "Bash(curl -s -N -X POST http://localhost:8931/v1/chat/completions -d '{}')",
+      "Bash(curl -s -m 2 -o /dev/null -w \"%{http_code}\" -X POST http://localhost:8931/v1/chat/completions)",
+      "Bash(mkdir *)"
+    ]
+  },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "claude-code-explorer"
-  ],
-  "permissions": {
-    "allow": [
-      "Bash(git ls-tree:*)"
-    ]
-  }
+  ]
 }

@@ -3,6 +3,8 @@ import type { LLMUsage as Usage } from 'src/types/llm.js'
 import type {
   ContentBlock,
   ContentBlockParam,
+  BetaRedactedThinkingBlock,
+  BetaThinkingBlock,
   RedactedThinkingBlock,
   RedactedThinkingBlockParam,
   TextBlockParam,
@@ -91,14 +93,7 @@ type HookAttachmentWithName = Exclude<
   HookPermissionDecisionAttachment
 >
 
-import type { LLMError } from 'src/types/llm.js'
-import type {
-  ContentBlock,
-  LLMMessage,
-  BetaRedactedThinkingBlock,
-  BetaThinkingBlock,
-  ToolUseBlock,
-} from 'src/types/llm.js'
+import type { LLMError, LLMMessage } from 'src/types/llm.js'
 import type {
   HookEvent,
   SDKAssistantMessageError,

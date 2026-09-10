@@ -404,6 +404,10 @@ export type ToolUseBlockParam = ToolUseBlock
 export type ToolResultBlockParam = ToolResultBlock
 export type ImageBlockParam = ImageBlock
 export type MessageParam = LLMMessageParam
+export type ThinkingBlockParam = ThinkingBlock
+export type RedactedThinkingBlockParam = RedactedThinkingBlock
+export type BetaThinkingBlock = ThinkingBlock
+export type BetaRedactedThinkingBlock = RedactedThinkingBlock
 
 // Value-level compat for error classes (old names → new names)
 // These are exported as both value and type so `instanceof` works.

@@ -19,6 +19,7 @@ import {
   LLMAuthenticationError,
   type LLMStreamEvent,
   type LLMMessageStreamParams,
+  type LLMStopReason,
   type LLMUsage,
   type ContentBlock,
 } from '../../types/llm.js'
@@ -621,11 +622,14 @@ export class LLMClient {
         body: JSON.stringify(body),
         signal: options.signal,
       })
-      // [DEBUG] Log response status
-      try {
-        const resDebug = `  → Response: ${response.status} ${response.statusText}\n\n`
-        require('fs').appendFileSync(require('path').join(require('os').homedir(), '.claude', 'llm-debug.log'), resDebug)
-      } catch { /* non-fatal */ }
+      // [DEBUG] enable with COGNITREE_LLM_DEBUG=1 (write is async to keep
+      // the request hot path free of sync disk I/O)
+      if (process.env.COGNITREE_LLM_DEBUG === '1') {
+        try {
+          const resDebug = `  → Response: ${response.status} ${response.statusText}\n\n`
+          require('fs').appendFile(require('path').join(require('os').homedir(), '.claude', 'llm-debug.log'), resDebug, () => {})
+        } catch { /* non-fatal */ }
+      }
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
         throw new LLMUserAbortError('Request aborted by user')
@@ -679,11 +683,13 @@ export class LLMClient {
         errorText = _cachedErrorText ?? await response.text()
       } catch { /* ignore read errors */ }
 
-      // [DEBUG] Log error details
-      try {
-        const errDebug = `  → ERROR: ${response.status} ${response.statusText}\n  → Body: ${errorText.slice(0, 500)}\n\n`
-        require('fs').appendFileSync(require('path').join(require('os').homedir(), '.claude', 'llm-debug.log'), errDebug)
-      } catch { /* non-fatal */ }
+      // [DEBUG] enable with COGNITREE_LLM_DEBUG=1 (async write, off the hot path)
+      if (process.env.COGNITREE_LLM_DEBUG === '1') {
+        try {
+          const errDebug = `  → ERROR: ${response.status} ${response.statusText}\n  → Body: ${errorText.slice(0, 500)}\n\n`
+          require('fs').appendFile(require('path').join(require('os').homedir(), '.claude', 'llm-debug.log'), errDebug, () => {})
+        } catch { /* non-fatal */ }
+      }
 
       if (response.status === 429) {
         // Parse into a clean human-readable message instead of dumping raw JSON
@@ -816,6 +822,16 @@ export class LLMClient {
     let textAccumulator = ''
     let textBlockStarted = false
 
+    // Completion tracking. Some gateways send finish_reason more than once —
+    // typically a chunk carrying the finish itself, then a final chunk that
+    // repeats it alongside `usage` (the stream_options.include_usage shape).
+    // The closing sequence (content_block_stop / message_delta / message_stop)
+    // must be emitted exactly ONCE: the consumer builds one assistant message
+    // per content_block_stop, so re-emitting it duplicates the visible reply.
+    let sawFinishReason = false
+    let sawDoneMarker = false
+    let pendingStopReason: LLMStopReason | null = null
+
     try {
       while (true) {
         if (signal.aborted) {
@@ -839,7 +855,10 @@ export class LLMClient {
           if (!trimmed.startsWith('data:')) continue
 
           const jsonStr = trimmed.slice('data:'.length).trim()
-          if (jsonStr === '[DONE]') continue
+          if (jsonStr === '[DONE]') {
+            sawDoneMarker = true
+            continue
+          }
 
           let chunk: OpenAIStreamChunk
           try {
@@ -964,123 +983,118 @@ export class LLMClient {
               }
             }
 
-            // ── Finish reason → close open blocks ─────────────────────
+            // ── Finish reason → record it, close at end of stream ──────
+            // Do NOT emit the closing sequence per occurrence. Gateways
+            // commonly repeat finish_reason on a later chunk (the usage
+            // summary chunk), and emitting content_block_stop for each
+            // occurrence makes the consumer create a duplicate assistant
+            // message — the reply appears twice in the transcript.
             if (choice.finish_reason) {
-              // Check if the accumulated text is actually a JSON tool call
-              // Small local models (e.g. qwen2.5-coder, deepseek-r1) often
-              // output tool calls as text instead of using function calling
-              let parsedToolCall = _tryParseTextAsToolCall(textAccumulator.trim())
-
-              // Normalize tool names and parameters for local model compatibility
-              if (parsedToolCall) {
-                parsedToolCall = _normalizeToolCall(parsedToolCall)
-              }
-
-              if (parsedToolCall && toolCallMap.size === 0) {
-                // The model output a tool call as text — convert it!
-                // Don't close the text block as normal; emit tool_use instead
-                if (textBlockStarted) {
-                  yield {
-                    type: 'content_block_stop',
-                    index: 0,
-                  } satisfies LLMStreamEvent
-                }
-
-                const toolBlockIndex = nextBlockIndex++
-                const toolId = `tool-text-${toolBlockIndex}`
-
-                // Emit tool_use start
-                yield {
-                  type: 'content_block_start',
-                  index: toolBlockIndex,
-                  content_block: {
-                    type: 'tool_use',
-                    id: toolId,
-                    name: parsedToolCall.name,
-                    input: {},
-                  },
-                } satisfies LLMStreamEvent
-
-                // Emit the arguments
-                yield {
-                  type: 'content_block_delta',
-                  index: toolBlockIndex,
-                  delta: {
-                    type: 'input_json_delta',
-                    partial_json: JSON.stringify(parsedToolCall.arguments),
-                  },
-                } satisfies LLMStreamEvent
-
-                // Close tool block
-                yield {
-                  type: 'content_block_stop',
-                  index: toolBlockIndex,
-                } satisfies LLMStreamEvent
-
-                // Emit message_delta with tool_use stop reason
-                const finalUsage: LLMUsage = {
-                  input_tokens: inputTokens,
-                  output_tokens: outputTokens,
-                }
-
-                yield {
-                  type: 'message_delta',
-                  delta: {
-                    stop_reason: 'tool_use',
-                    stop_sequence: null,
-                  },
-                  usage: finalUsage,
-                } satisfies LLMStreamEvent
-
-                yield {
-                  type: 'message_stop',
-                } satisfies LLMStreamEvent
-              } else {
-                // Normal flow — close text block if opened
-                if (textBlockStarted && toolCallMap.size === 0) {
-                  yield {
-                    type: 'content_block_stop',
-                    index: 0,
-                  } satisfies LLMStreamEvent
-                }
-
-                // Close all tool_use blocks
-                for (const entry of toolCallMap.values()) {
-                  yield {
-                    type: 'content_block_stop',
-                    index: entry.blockIndex,
-                  } satisfies LLMStreamEvent
-                }
-
-                // Map finish_reason to Anthropic stop_reason
-                const stopReason =
-                  choice.finish_reason === 'tool_calls'
-                    ? 'tool_use'
-                    : choice.finish_reason === 'length'
-                      ? 'max_tokens'
-                      : 'end_turn'
-
-                const finalUsage: LLMUsage = {
-                  input_tokens: inputTokens,
-                  output_tokens: outputTokens,
-                }
-
-                yield {
-                  type: 'message_delta',
-                  delta: {
-                    stop_reason: stopReason,
-                    stop_sequence: null,
-                  },
-                  usage: finalUsage,
-                } satisfies LLMStreamEvent
-
-                yield {
-                  type: 'message_stop',
-                } satisfies LLMStreamEvent
-              }
+              sawFinishReason = true
+              pendingStopReason =
+                choice.finish_reason === 'tool_calls'
+                  ? 'tool_use'
+                  : choice.finish_reason === 'length'
+                    ? 'max_tokens'
+                    : 'end_turn'
             }
           }
         }
+      }
+
+      // ── Close the message exactly once, at end of stream ──────────────
+      // Runs after the SSE body ends ([DONE] sentinel or connection close).
+      // Waiting until here means usage accumulated from ANY chunk — including
+      // a trailing usage summary that arrives after the finish_reason chunk —
+      // lands in the final message_delta. Streams that ended without any
+      // completion signal are left unclosed: the caller treats them as
+      // incomplete and retries via its non-streaming fallback.
+      if (sawFinishReason || sawDoneMarker) {
+        // Check if the accumulated text is actually a JSON tool call.
+        // Small local models (e.g. qwen2.5-coder, deepseek-r1) often output
+        // tool calls as text instead of using function calling.
+        let parsedToolCall = _tryParseTextAsToolCall(textAccumulator.trim())
+
+        // Normalize tool names and parameters for local model compatibility
+        if (parsedToolCall) {
+          parsedToolCall = _normalizeToolCall(parsedToolCall)
+        }
+
+        if (parsedToolCall && toolCallMap.size === 0) {
+          // The model output a tool call as text — convert it!
+          // Don't close the text block as normal; emit tool_use instead
+          if (textBlockStarted) {
+            yield {
+              type: 'content_block_stop',
+              index: 0,
+            } satisfies LLMStreamEvent
+          }
+
+          const toolBlockIndex = nextBlockIndex++
+          const toolId = `tool-text-${toolBlockIndex}`
+
+          // Emit tool_use start
+          yield {
+            type: 'content_block_start',
+            index: toolBlockIndex,
+            content_block: {
+              type: 'tool_use',
+              id: toolId,
+              name: parsedToolCall.name,
+              input: {},
+            },
+          } satisfies LLMStreamEvent
+
+          // Emit the arguments
+          yield {
+            type: 'content_block_delta',
+            index: toolBlockIndex,
+            delta: {
+              type: 'input_json_delta',
+              partial_json: JSON.stringify(parsedToolCall.arguments),
+            },
+          } satisfies LLMStreamEvent
+
+          // Close tool block
+          yield {
+            type: 'content_block_stop',
+            index: toolBlockIndex,
+          } satisfies LLMStreamEvent
+        } else {
+          // Normal flow — close text block if opened
+          if (textBlockStarted && toolCallMap.size === 0) {
+            yield {
+              type: 'content_block_stop',
+              index: 0,
+            } satisfies LLMStreamEvent
+          }
+
+          // Close all tool_use blocks
+          for (const entry of toolCallMap.values()) {
+            yield {
+              type: 'content_block_stop',
+              index: entry.blockIndex,
+            } satisfies LLMStreamEvent
+          }
+        }
+
+        const finalUsage: LLMUsage = {
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+        }
+
+        yield {
+          type: 'message_delta',
+          delta: {
+            stop_reason: pendingStopReason ?? 'end_turn',
+            stop_sequence: null,
+          },
+          usage: finalUsage,
+        } satisfies LLMStreamEvent
+
+        yield {
+          type: 'message_stop',
+        } satisfies LLMStreamEvent
       }
     } catch (streamErr) {
       // Handle connection drops gracefully (Ollama OOM, timeout, etc.)

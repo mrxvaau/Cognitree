@@ -8,8 +8,18 @@
       "Bash(set *)",
       "Bash(del *)",
       "Bash(taskkill *)",
-      "Bash(powershell *)"
+      "Bash(powershell *)",
+      "Agent(Explore)",
+      "Bash(git *)",
+      "Bash(bunx *)",
+      "Bash(timeout *)",
+      "send_message",
+      "Read(C:\\Users\\Qlurut\\AppData\\Local\\Temp/**)",
+      "Bash(cd *)",
+      "Bash(echo *)",
+      "Bash(dir *)",
+      "computer_use__launch_app"
     ]
   },
-  "$version": 3
+  "$version": 4
 }
