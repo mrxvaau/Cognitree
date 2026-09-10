@@ -158,10 +158,11 @@ func (s *State) HasMessages() bool {
 	return len(s.Messages) > 0
 }
 
-// IsWelcomeScreen returns true when the welcome screen should be shown
-// (no messages yet and not streaming).
+// IsWelcomeScreen returns true when the welcome screen should be shown.
+// Becomes false the moment the user starts typing (Input.Value() != ""),
+// so the real input bar immediately reappears on first keystroke.
 func (s *State) IsWelcomeScreen() bool {
-	return !s.HasMessages() && !s.Streaming
+	return !s.HasMessages() && !s.Streaming && s.Input.Value() == ""
 }
 
 func (s *State) LastMessageTime() time.Time {

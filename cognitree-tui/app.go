@@ -70,11 +70,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.state.Input.SetWidth(max(msg.Width-4, 20))
 		if !a.state.Ready {
 			a.state.Ready = true
-			a.state.Viewport = viewport.New(msg.Width, viewportHeight(msg.Height))
+			a.state.Viewport = viewport.New(msg.Width, viewportHeight(msg.Height, a.state.IsWelcomeScreen()))
 			a.state.Viewport.SetContent(a.viewportContent())
 		} else {
 			a.state.Viewport.Width = msg.Width
-			a.state.Viewport.Height = viewportHeight(msg.Height)
+			a.state.Viewport.Height = viewportHeight(msg.Height, a.state.IsWelcomeScreen())
 		}
 		return a, nil
 
@@ -315,6 +315,8 @@ func (a App) handleKey(msg tea.KeyMsg, cmds *[]tea.Cmd) (tea.Model, tea.Cmd) {
 			a.state.SlashMatches = nil
 			a.state.SlashSelected = 0
 		}
+		// Refresh viewport so welcome↔chat transition fires immediately on first keystroke.
+		a.refreshViewport()
 		return a, tea.Batch(*cmds...)
 	}
 }
@@ -507,6 +509,8 @@ func (a *App) refreshViewport() {
 	if !a.state.Ready {
 		return
 	}
+	// Recalculate height whenever welcome↔chat state may have changed.
+	a.state.Viewport.Height = viewportHeight(a.state.Height, a.state.IsWelcomeScreen())
 	a.state.Viewport.SetContent(a.viewportContent())
 }
 
@@ -525,11 +529,16 @@ func (a *App) viewportContent() string {
 	)
 }
 
-func viewportHeight(totalH int) int {
+// viewportHeight computes usable viewport rows.
+// On the welcome screen the real input bar is hidden, so we reclaim those rows.
+func viewportHeight(totalH int, onWelcome bool) int {
 	const headerRows = 1
 	const inputRows = 3
 	const statusRows = 1
-	h := totalH - headerRows - inputRows - statusRows
+	h := totalH - headerRows - statusRows
+	if !onWelcome {
+		h -= inputRows
+	}
 	if h < 5 {
 		h = 5
 	}
