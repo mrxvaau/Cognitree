@@ -47,10 +47,7 @@ func RenderLayout(s *model.State, viewportContent string) string {
 	// ── 4b. Add Directory dialog ──────────────────────────────────────────────
 	addDirDialog := RenderAddDirDialog(s)
 
-	// ── 5. Input bar ──────────────────────────────────────────────────────────
-	inputHint := buildInputHint(s)
-	inputBar := s.Input.View()
-
+	// ── 5. Input bar + hint (hidden on welcome screen) ───────────────────────
 	// ── 6. Status bar ─────────────────────────────────────────────────────────
 	statusBar := RenderStatusBar(s, w)
 
@@ -72,8 +69,11 @@ func RenderLayout(s *model.State, viewportContent string) string {
 		sb.WriteString(addDirDialog)
 		sb.WriteByte('\n')
 	}
-	// Hide real input bar on welcome screen — the decorative preview in welcome.go replaces it.
+	// On welcome screen: only the decorative preview box in welcome.go is shown.
+	// The real textarea is completely skipped — no render, no cursor, no gap.
 	if !s.IsWelcomeScreen() {
+		inputHint := buildInputHint(s)
+		inputBar := s.Input.View()
 		if inputHint != "" {
 			sb.WriteString(inputHint)
 			sb.WriteByte('\n')

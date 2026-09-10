@@ -17,17 +17,12 @@ import (
 // Layout (top → bottom):
 //
 //	[vertical padding]
-//	[empty line]
-//	[empty line]
 //	[logo: "c o g n i" white + "t r e e" green, letter-spaced, bold]
-//	[empty line]
 //	[subtitle: YOUR CODING PARTNER THAT REMEMBERS]
-//	[empty line]
-//	[empty line]
-//	[input preview box: left green bar, dark bg]
-//	[empty line]
+//	[empty]
+//	[empty]
+//	[input preview box: left green bar, dark bg — perfectly centered]
 //	[keybindings: right-aligned under box]
-//	[vertical padding]
 //	[tip: centered at bottom]
 func RenderWelcome(s *model.State) string {
 	if s.Width <= 0 {
@@ -44,12 +39,9 @@ func RenderWelcome(s *model.State) string {
 	}
 
 	// ── 1. Logo — letter-spaced "c o g n i" white + "t r e e" green ─────────
-	// Letter spacing by inserting spaces between each character.
-	cogniSpaced := letterSpace("cogni")
-	treeSpaced := letterSpace("tree")
-	cogniPart := styles.StyleWelcomeLogoWhite.Render(cogniSpaced)
-	treePart := styles.StyleWelcomeLogoGreen.Render(treeSpaced)
-	logo := cogniPart + "  " + treePart // two spaces between the words
+	cogniPart := styles.StyleWelcomeLogoWhite.Render(letterSpace("cogni"))
+	treePart := styles.StyleWelcomeLogoGreen.Render(letterSpace("tree"))
+	logo := cogniPart + "  " + treePart
 
 	// ── 2. Subtitle ───────────────────────────────────────────────────────────
 	subtitle := styles.StyleWelcomeKeyMuted.Render("Y O U R   C O D I N G   P A R T N E R   T H A T   R E M E M B E R S")
@@ -86,29 +78,24 @@ func RenderWelcome(s *model.State) string {
 	modelLabel := styles.StyleWelcomeLogoWhite.Render(modelName)
 	providerLabel := styles.StyleWelcomeKeyMuted.Render(provider)
 	metaLine := fmt.Sprintf("%s %s %s   %s", buildLabel, dot, modelLabel, providerLabel)
-
 	if hasMemory {
-		memBadge := styles.StyleWelcomeLogoGreen.Render("● memory active")
-		metaLine = metaLine + "   " + memBadge
+		metaLine = metaLine + "   " + styles.StyleWelcomeLogoGreen.Render("● memory active")
 	}
 
-	boxInner := lipgloss.JoinVertical(
-		lipgloss.Left,
+	boxInner := lipgloss.JoinVertical(lipgloss.Left,
 		placeholderLine,
 		"",
 		metaLine,
 	)
 
-	// inner width = boxWidth minus left border (1) + left padding (2) + right padding (2)
+	// innerWidth = boxWidth minus: left border(1) + left pad(2) + right pad(2)
 	innerWidth := boxWidth - 5
 	if innerWidth < 20 {
 		innerWidth = 20
 	}
-	inputBox := styles.StyleWelcomeInputBox.
-		Width(innerWidth).
-		Render(boxInner)
+	inputBox := styles.StyleWelcomeInputBox.Width(innerWidth).Render(boxInner)
 
-	// ── 6. Keybindings row (right-aligned to boxWidth) ────────────────────────
+	// ── 6. Keybindings row (right-aligned, same width as box) ────────────────
 	kb := fmt.Sprintf("%s%s   %s%s   %s%s",
 		styles.StyleWelcomeKeyBold.Render("tab"),
 		styles.StyleWelcomeKeyMuted.Render(" agents"),
@@ -133,21 +120,24 @@ func RenderWelcome(s *model.State) string {
 		Align(lipgloss.Center).
 		Render(tip)
 
-	// ── 8. Center each element horizontally in the terminal ──────────────────
-	center := lipgloss.NewStyle().Width(s.Width).Align(lipgloss.Center)
+	// ── 8. Horizontal centering using PlaceHorizontal ─────────────────────────
+	// PlaceHorizontal is ANSI-aware unlike Width().Align() on pre-rendered strings.
+	place := func(content string) string {
+		return lipgloss.PlaceHorizontal(s.Width, lipgloss.Center, content)
+	}
 
-	centeredLogo := center.Render(logo)
-	centeredSubtitle := center.Render(subtitle)
-	centeredBox := center.Render(inputBox)
-	centeredKeys := center.Render(keybindings)
-	centeredTip := center.Render(tipRow)
+	centeredLogo := place(logo)
+	centeredSubtitle := place(subtitle)
+	centeredBox := place(inputBox)
+	centeredKeys := place(keybindings)
+	centeredTip := place(tipRow)
 
-	// ── 9. Stack: logo has 2 blank lines above+below for perceived size ───────
+	// ── 9. Stack all elements ─────────────────────────────────────────────────
 	stacked := strings.Join([]string{
-		"",         // breathing room above logo
-		"",         // breathing room above logo
+		"",            // breathing room above logo
+		"",
 		centeredLogo,
-		"",         // breathing room below logo
+		"",            // breathing room below logo
 		centeredSubtitle,
 		"",
 		"",
@@ -158,11 +148,7 @@ func RenderWelcome(s *model.State) string {
 
 	// ── 10. Vertical centering ────────────────────────────────────────────────
 	contentLines := strings.Split(stacked, "\n")
-	contentHeight := len(contentLines)
-
-	// Reserve 3 rows at bottom for tip + spacing
-	availH := s.Height - 4
-	topPad := (availH - contentHeight) / 3
+	topPad := (s.Height - len(contentLines) - 3) / 3 // 3 = tip row + 2 gap lines
 	if topPad < 0 {
 		topPad = 0
 	}
@@ -178,8 +164,7 @@ func RenderWelcome(s *model.State) string {
 	return out.String()
 }
 
-// letterSpace inserts a space between every character in s.
-// "cogni" → "c o g n i"
+// letterSpace inserts a space between every character: "cogni" → "c o g n i"
 func letterSpace(s string) string {
 	runes := []rune(s)
 	parts := make([]string, len(runes))
