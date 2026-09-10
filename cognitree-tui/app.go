@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -33,7 +33,6 @@ var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
-// App is the root BubbleTea model.
 type App struct {
 	state    model.State
 	back     *protocol.BackendProcess
@@ -51,16 +50,12 @@ func newApp(back *protocol.BackendProcess, initialModel string) App {
 	}
 }
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
-
 func (a App) Init() tea.Cmd {
 	return tea.Batch(
-		textinput.Blink,
+		textarea.Blink,
 		spinnerTick(),
 	)
 }
-
-// ─── Update ───────────────────────────────────────────────────────────────────
 
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
@@ -71,6 +66,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		a.state.Width = msg.Width
 		a.state.Height = msg.Height
+		a.state.Input.SetWidth(max(msg.Width-4, 20))
 		if !a.state.Ready {
 			a.state.Ready = true
 			a.state.Viewport = viewport.New(msg.Width, viewportHeight(msg.Height))
@@ -110,7 +106,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 
-	// ── Typed dispatch from dispatcher ────────────────────────────────────────
+	// ── Typed events ─────────────────────────────────────────────────────────
 	case protocol.EvtSessionInit:
 		a.state.Session.ID = msg.SessionID
 		if msg.Model != "" {
@@ -132,11 +128,13 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.state.StreamBuf += msg.Text
 		}
 		a.refreshViewport()
+		if a.state.AutoScroll {
+			a.state.Viewport.GotoBottom()
+		}
 		return a, nil
 
 	case protocol.EvtAssistantText:
 		a.state.Streaming = false
-		// Replace stream buffer with finalised message.
 		a.state.StreamBuf = ""
 		a.state.Messages = append(a.state.Messages, model.ChatMessage{
 			Role:         model.RoleAssistant,
@@ -145,8 +143,13 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			UUID:         msg.UUID,
 			Timestamp:    time.Now(),
 		})
+		if !a.state.AutoScroll {
+			a.state.UnseenCount++
+		}
 		a.refreshViewport()
-		a.state.Viewport.GotoBottom()
+		if a.state.AutoScroll {
+			a.state.Viewport.GotoBottom()
+		}
 		return a, nil
 
 	case protocol.EvtToolUse:
@@ -156,13 +159,14 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			msg.ToolUseID, msg.ToolName, msg.InputJSON,
 		))
 		a.refreshViewport()
-		a.state.Viewport.GotoBottom()
+		if a.state.AutoScroll {
+			a.state.Viewport.GotoBottom()
+		}
 		return a, nil
 
 	case protocol.EvtPermissionRequest:
 		a.state.Streaming = false
 		a.state.StreamBuf = ""
-		// Check "always allow" session list.
 		if a.state.AlwaysAllow[msg.ToolName] {
 			_ = a.back.SendControlResponse(msg.RequestID, map[string]interface{}{
 				"behavior": "allow",
@@ -189,8 +193,6 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case protocol.EvtParseError:
-		// Non-fatal — log to status, not to transcript.
-		_ = msg // silently swallow
 		return a, nil
 
 	// ── Key events ────────────────────────────────────────────────────────────
@@ -198,7 +200,6 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleKey(msg, &cmds)
 	}
 
-	// Forward to viewport if nothing else consumed.
 	var vpCmd tea.Cmd
 	a.state.Viewport, vpCmd = a.state.Viewport.Update(msg)
 	if vpCmd != nil {
@@ -211,12 +212,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // ─── Key handler ─────────────────────────────────────────────────────────────
 
 func (a App) handleKey(msg tea.KeyMsg, cmds *[]tea.Cmd) (tea.Model, tea.Cmd) {
-	// ── Permission dialog keys ────────────────────────────────────────────────
 	if a.state.PendingPerm != nil {
 		return a.handlePermKey(msg)
 	}
 
-	// ── Slash overlay navigation ──────────────────────────────────────────────
+	// Slash overlay navigation
 	if a.state.InputMode == model.ModeSlash && len(a.state.SlashMatches) > 0 {
 		switch msg.String() {
 		case "up":
@@ -240,10 +240,8 @@ func (a App) handleKey(msg tea.KeyMsg, cmds *[]tea.Cmd) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg.String() {
-	// ── Quit / Interrupt ──────────────────────────────────────────────────────
 	case "ctrl+c":
 		if a.state.Streaming {
-			// Interrupt, don't quit.
 			_ = a.back.SendInterrupt(uuid.New().String())
 			a.state.Streaming = false
 			a.state.StreamBuf = ""
@@ -252,41 +250,42 @@ func (a App) handleKey(msg tea.KeyMsg, cmds *[]tea.Cmd) (tea.Model, tea.Cmd) {
 		}
 		return a, tea.Quit
 
-	// ── Submit ────────────────────────────────────────────────────────────────
 	case "enter":
 		if a.state.Input.Value() == "" {
 			return a, nil
 		}
 		return a.submitInput()
 
-	// ── Newline in input ──────────────────────────────────────────────────────
-	case "ctrl+j", "ctrl+m":
-		// Allow multi-line via ctrl+j. BubbleTea textinput is single-line,
-		// so we append a literal newline to the value.
-		cur := a.state.Input.Value()
-		a.state.Input.SetValue(cur + "\n")
-		return a, nil
-
-	// ── Scroll ────────────────────────────────────────────────────────────────
 	case "pgup", "ctrl+u":
+		a.state.AutoScroll = false
 		a.state.Viewport.HalfViewUp()
 		return a, nil
+
 	case "pgdown", "ctrl+d":
 		a.state.Viewport.HalfViewDown()
+		if a.state.Viewport.AtBottom() {
+			a.state.AutoScroll = true
+			a.state.UnseenCount = 0
+		}
 		return a, nil
 
-	// ── Slash detection ───────────────────────────────────────────────────────
-	default:
-		// Update input first.
-		var tiCmd tea.Cmd
-		a.state.Input, tiCmd = a.state.Input.Update(msg)
-		*cmds = append(*cmds, tiCmd)
+	case "ctrl+l":
+		a.state.Messages = nil
+		a.state.StreamBuf = ""
+		a.state.Streaming = false
+		a.state.ShowContext = false
+		a.refreshViewport()
+		return a, nil
 
-		// Check if we entered / at position 0.
+	default:
+		var taCmd tea.Cmd
+		a.state.Input, taCmd = a.state.Input.Update(msg)
+		*cmds = append(*cmds, taCmd)
+
 		val := a.state.Input.Value()
 		if strings.HasPrefix(val, "/") {
 			a.state.InputMode = model.ModeSlash
-			query := val // e.g. "/cle"
+			query := val
 			matches := a.slashReg.Match(query)
 			a.state.SlashMatches = slashEntries(matches)
 			if a.state.SlashSelected >= len(a.state.SlashMatches) {
@@ -337,18 +336,17 @@ func (a App) submitInput() (tea.Model, tea.Cmd) {
 	a.state.InputMode = model.ModeNormal
 	a.state.SlashMatches = nil
 	a.state.SlashSelected = 0
+	a.state.AutoScroll = true
+	a.state.UnseenCount = 0
 
-	// Check if it's a slash command.
 	if strings.HasPrefix(text, "/") {
 		name, args := slash.Parse(text)
 		if cmd, ok := a.slashReg.Find(name); ok && cmd.Builtin {
 			result := cmd.Handler(args)
 			return a.applySlashResult(result, text)
 		}
-		// Non-builtin → send verbatim to backend.
 	}
 
-	// Regular user message.
 	a.state.Messages = append(a.state.Messages, model.NewUserMsg(text))
 	a.refreshViewport()
 	a.state.Viewport.GotoBottom()
@@ -369,6 +367,7 @@ func (a App) applySlashResult(r slash.CommandResult, originalText string) (tea.M
 		a.state.Messages = nil
 		a.state.StreamBuf = ""
 		a.state.Streaming = false
+		a.state.ShowContext = false
 		a.refreshViewport()
 	case "help":
 		helpText := slash.HelpText(a.slashReg)
@@ -394,8 +393,11 @@ func (a App) applySlashResult(r slash.CommandResult, originalText string) (tea.M
 		a.state.Messages = append(a.state.Messages, model.NewSystemMsg(info, ""))
 		a.refreshViewport()
 		a.state.Viewport.GotoBottom()
+	case "context":
+		a.state.ShowContext = !a.state.ShowContext
+		a.refreshViewport()
+		a.state.Viewport.GotoBottom()
 	default:
-		// Send to backend verbatim.
 		a.state.Messages = append(a.state.Messages, model.NewUserMsg(originalText))
 		a.refreshViewport()
 		a.state.Viewport.GotoBottom()
@@ -405,14 +407,11 @@ func (a App) applySlashResult(r slash.CommandResult, originalText string) (tea.M
 	return a, nil
 }
 
-// ─── Accept slash suggestion ──────────────────────────────────────────────────
-
 func (a App) acceptSlash() (tea.Model, tea.Cmd) {
 	if len(a.state.SlashMatches) == 0 {
 		return a, nil
 	}
 	sel := a.state.SlashMatches[a.state.SlashSelected]
-	// Replace input with "/<name> " (with trailing space ready for args).
 	a.state.Input.SetValue("/" + sel.Name + " ")
 	a.state.InputMode = model.ModeNormal
 	a.state.SlashMatches = nil
@@ -420,18 +419,13 @@ func (a App) acceptSlash() (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
-// ─── Backend line dispatch ────────────────────────────────────────────────────
-
 func (a *App) handleBackendLine(line string) tea.Cmd {
 	evt, _ := protocol.Dispatch(line)
 	if evt == nil {
 		return nil
 	}
-	// Re-inject as a typed message so Update can handle it.
 	return func() tea.Msg { return evt }
 }
-
-// ─── Viewport helpers ─────────────────────────────────────────────────────────
 
 func (a *App) refreshViewport() {
 	if !a.state.Ready {
@@ -441,6 +435,9 @@ func (a *App) refreshViewport() {
 }
 
 func (a *App) viewportContent() string {
+	if a.state.ShowContext {
+		return ui.RenderContextVisualization(&a.state, a.state.Width)
+	}
 	if !a.state.HasMessages() && !a.state.Streaming {
 		return ui.RenderWelcome(&a.state)
 	}
@@ -452,10 +449,9 @@ func (a *App) viewportContent() string {
 	)
 }
 
-// viewportHeight calculates available rows for the viewport (total minus chrome).
 func viewportHeight(totalH int) int {
 	const headerRows = 1
-	const inputRows = 3   // input border (2) + 1 text row
+	const inputRows = 3
 	const statusRows = 1
 	h := totalH - headerRows - inputRows - statusRows
 	if h < 5 {
@@ -464,8 +460,6 @@ func viewportHeight(totalH int) int {
 	return h
 }
 
-// ─── View ─────────────────────────────────────────────────────────────────────
-
 func (a App) View() string {
 	if a.state.FatalErr != "" {
 		return styles.StyleError.Render("\n  Fatal: " + a.state.FatalErr +
@@ -473,8 +467,6 @@ func (a App) View() string {
 	}
 	return ui.RenderLayout(&a.state, a.state.Viewport.View())
 }
-
-// ─── Misc helpers ─────────────────────────────────────────────────────────────
 
 func slashEntries(cmds []slash.Command) []model.SlashEntry {
 	out := make([]model.SlashEntry, len(cmds))
@@ -498,6 +490,5 @@ func humanTokens(n int) string {
 	return fmt.Sprintf("%dk", n/1000)
 }
 
-// Ensure json and lipgloss are used (imported for future use in this file).
 var _ = json.Marshal
 var _ = lipgloss.NewStyle

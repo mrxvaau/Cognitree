@@ -4,27 +4,34 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"cognitree-tui/model"
 	"cognitree-tui/styles"
 )
 
-// RenderStatusBar renders the 1-row bottom status line.
-//   normal │ ~/path │ 1.2k↑ 438↓ │ $0.0012
+// RenderStatusBar renders the 1-row bottom status line matching TS StatusLine.tsx.
+//   ready │ ~/path │ 1.2k↑ 438↓ │ $0.0012
 func RenderStatusBar(s *model.State, width int) string {
 	var parts []string
 
-	// Mode / streaming indicator
+	// Mode / status indicator
 	if s.Streaming {
-		parts = append(parts, styles.StyleStreaming.Render("● thinking"))
+		parts = append(parts, styles.StyleStreaming.Render("● thinking..."))
 	} else if s.PendingPerm != nil {
-		parts = append(parts, styles.StyleWarning.Render("● permission"))
+		parts = append(parts, styles.StyleWarning.Render("● permission required"))
 	} else {
-		parts = append(parts, styles.StyleStatusBar.Render("ready"))
+		parts = append(parts, styles.StyleSuccess.Render("● ready"))
 	}
 
 	// CWD
 	if s.Session.Cwd != "" {
 		parts = append(parts, styles.StyleStatusModel.Render(shortCwd(s.Session.Cwd)))
+	}
+
+	// Model
+	if s.Session.ModelName != "" {
+		parts = append(parts, styles.StyleStatusModel.Render(shortModelName(s.Session.ModelName)))
 	}
 
 	// Token counts
@@ -51,14 +58,12 @@ func RenderStatusBar(s *model.State, width int) string {
 
 	sep := styles.StyleStatusSep.Render(styles.Sep)
 	line := strings.Join(parts, sep)
+	content := " " + line
 
-	// Pad to width
-	if width > 0 {
-		lineLen := len(line) // approximate; ANSI escape codes inflate len but that's OK for padding
-		if lineLen < width {
-			line += strings.Repeat(" ", width-lineLen)
-		}
+	visWidth := lipgloss.Width(content)
+	if width > visWidth {
+		content += strings.Repeat(" ", width-visWidth)
 	}
 
-	return styles.StyleStatusBar.Render(" " + line)
+	return styles.StyleStatusBar.Render(content)
 }

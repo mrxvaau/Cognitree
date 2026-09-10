@@ -5,54 +5,50 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"cognitree-tui/styles"
 )
 
 // RenderHeader renders the top-most 1-row bar:
 //   COGNITREE ● │ model: <name> │ ~/<cwd> │ streaming…
 func RenderHeader(modelName, cwd string, streaming bool, inputTokens, outputTokens int, width int) string {
-	// ── Brand ────────────────────────────────────────────────────────────────
 	brand := " COGNITREE "
 
-	// ── Streaming dot ────────────────────────────────────────────────────────
 	dot := ""
 	if streaming {
 		dot = styles.StyleStreaming.Render(styles.IconDot) + " "
 	}
 
-	// ── Model ────────────────────────────────────────────────────────────────
 	shortModel := shortModelName(modelName)
 	modelSeg := " " + shortModel + " "
-
-	// ── CWD (last 2 path components) ─────────────────────────────────────────
 	cwdSeg := " " + shortCwd(cwd) + " "
 
-	// ── Token counts ─────────────────────────────────────────────────────────
 	tokenSeg := ""
 	if inputTokens > 0 || outputTokens > 0 {
 		tokenSeg = fmt.Sprintf(" %s↑ %s↓ ", humanTokens(inputTokens), humanTokens(outputTokens))
 	}
 
-	// ── Assemble ─────────────────────────────────────────────────────────────
 	left := styles.StyleHeader.Render(brand)
-	middle := styles.StyleHeaderRight.Render(dot+modelSeg+"│"+cwdSeg)
+	middleContent := dot + modelSeg + "│" + cwdSeg
+	middle := styles.StyleHeaderRight.Render(middleContent)
 	right := ""
 	if tokenSeg != "" {
 		right = styles.StyleHeaderRight.Render(tokenSeg)
 	}
 
-	// Pad the middle to fill available space.
-	leftLen := len(brand) // visual width approximation
-	rightLen := len(tokenSeg)
-	pad := width - leftLen - rightLen - len(dot+modelSeg+"│"+cwdSeg)
+	// Exact printed column widths using lipgloss.Width()
+	leftWidth := lipgloss.Width(left)
+	middleWidth := lipgloss.Width(middle)
+	rightWidth := lipgloss.Width(right)
+
+	pad := width - leftWidth - middleWidth - rightWidth
 	if pad > 0 {
-		middle += strings.Repeat(" ", pad)
+		middle += styles.StyleHeaderRight.Render(strings.Repeat(" ", pad))
 	}
 
 	return left + middle + right
 }
-
-// ─── Header component helpers ─────────────────────────────────────────────────
 
 // shortCwd keeps the last 2 path components.
 func shortCwd(cwd string) string {
@@ -68,12 +64,10 @@ func shortCwd(cwd string) string {
 }
 
 // shortModelName removes common provider prefixes that add noise.
-// Non-standard providers (z-ai/, deepseek/, etc.) are kept as-is.
 func shortModelName(name string) string {
 	for _, prefix := range []string{"anthropic/", "openai/", "ollama/"} {
 		name = strings.TrimPrefix(name, prefix)
 	}
-	// Truncate to 36 chars max (generous — model names like z-ai/glm-5.3-free need space)
 	if len(name) > 36 {
 		name = name[:33] + "…"
 	}

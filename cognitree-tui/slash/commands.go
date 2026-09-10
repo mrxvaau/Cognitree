@@ -65,8 +65,11 @@ func builtinCommands() []Command {
 		},
 		{
 			Name:        "context",
-			Description: "Show context window usage",
-			Builtin:     false,
+			Description: "Show context window usage panel",
+			Builtin:     true,
+			Handler: func(args string) CommandResult {
+				return CommandResult{ClearInput: true, Action: "context"}
+			},
 		},
 		{
 			Name:        "memory",

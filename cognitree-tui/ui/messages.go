@@ -26,14 +26,14 @@ func RenderMessages(msgs []model.ChatMessage, streamBuf string, streaming bool, 
 		}
 		sb.WriteString(renderMessage(m, width))
 		if i < len(msgs)-1 {
-			sb.WriteByte('\n')
+			sb.WriteString("\n\n")
 		}
 	}
 
 	// Live streaming partial text
 	if streaming && streamBuf != "" {
 		if sb.Len() > 0 {
-			sb.WriteByte('\n')
+			sb.WriteString("\n\n")
 		}
 		sb.WriteString(renderStreamingMsg(streamBuf, width))
 	}
@@ -73,8 +73,8 @@ func renderUser(m *model.ChatMessage, width int) string {
 	ts := styles.StyleMuted.Render(formatTime(m.Timestamp))
 	header := fmt.Sprintf("%s  %s", label, ts)
 
-	// Wrap content inside user bubble background
-	bubbleWidth := min(width-2, 80)
+	// User bubble spans full usable chat width
+	bubbleWidth := max(width-2, 20)
 	content := wrapText(m.Content, bubbleWidth-4)
 	bubble := styles.StyleUserBubble.Width(bubbleWidth).Render(content)
 
@@ -88,13 +88,11 @@ func renderAssistant(m *model.ChatMessage, width int) string {
 	ts := styles.StyleMuted.Render(formatTime(m.Timestamp))
 	header := fmt.Sprintf("%s  %s", label, ts)
 
-	// Render thinking block if present (collapsed, dim)
 	var parts []string
 	if m.ThinkingText != "" {
 		parts = append(parts, renderThinkingInline(m.ThinkingText, width))
 	}
 
-	// Main content through markdown renderer
 	if m.Content != "" {
 		parts = append(parts, styles.StyleAssistantBubble.Render(
 			RenderMarkdown(m.Content, width-4),
@@ -109,9 +107,9 @@ func renderAssistant(m *model.ChatMessage, width int) string {
 
 func renderStreamingMsg(text string, width int) string {
 	label := styles.StyleAssistantLabel.Render("◆ cognitree")
-	header := label + "  " + styles.StyleStreaming.Render("●")
+	header := label + "  " + styles.StyleStreaming.Render("● generating...")
 	content := styles.StyleAssistantBubble.Render(
-		RenderMarkdown(text, width-4) + styles.StyleStreaming.Render("▋"),
+		RenderMarkdown(text, width-4) + styles.StyleStreaming.Render(" ▋"),
 	)
 	return header + "\n" + content
 }
@@ -124,11 +122,10 @@ func renderThinking(m *model.ChatMessage, width int) string {
 
 func renderThinkingInline(text string, width int) string {
 	label := styles.StyleMuted.Render("  💭 thinking")
-	// Collapse to first 2 lines.
 	lines := strings.Split(text, "\n")
 	snippet := ""
-	if len(lines) > 2 {
-		snippet = strings.Join(lines[:2], "\n") + "\n  …"
+	if len(lines) > 3 {
+		snippet = strings.Join(lines[:3], "\n") + "\n  …"
 	} else {
 		snippet = text
 	}
@@ -142,9 +139,8 @@ func renderToolUse(m *model.ChatMessage, width int) string {
 	icon := toolIcon(m.ToolName)
 	nameStr := styles.StyleToolName.Render(icon + " " + m.ToolName)
 
-	// Truncate input JSON for readability — show first 5 lines.
 	inputLines := strings.Split(m.ToolInput, "\n")
-	maxLines := 5
+	maxLines := 6
 	suffix := ""
 	if len(inputLines) > maxLines {
 		inputLines = inputLines[:maxLines]
@@ -152,7 +148,7 @@ func renderToolUse(m *model.ChatMessage, width int) string {
 	}
 	inputStr := styles.StyleToolInput.Render(strings.Join(inputLines, "\n") + suffix)
 
-	cardWidth := min(width-4, 72)
+	cardWidth := max(width-4, 20)
 	card := styles.StyleToolCard.Width(cardWidth).Render(nameStr + "\n" + inputStr)
 	return "  " + card
 }
@@ -162,17 +158,15 @@ func renderToolUse(m *model.ChatMessage, width int) string {
 func renderToolResult(m *model.ChatMessage, width int) string {
 	var icon string
 	if m.ToolSuccess {
-		icon = styles.StyleSuccess.Render("  ✓")
+		icon = styles.StyleSuccess.Render("  ✓ tool completed")
 	} else {
-		icon = styles.StyleError.Render("  ✗")
+		icon = styles.StyleError.Render("  ✗ tool failed")
 	}
 
-	// Detect diff output
 	if looksLikeDiff(m.ToolResult) {
 		return icon + "\n" + RenderDiff(m.ToolResult, width-4)
 	}
 
-	// Plain result — truncate to first 20 lines.
 	lines := strings.Split(m.ToolResult, "\n")
 	const maxResultLines = 20
 	suffix := ""
@@ -212,7 +206,8 @@ func renderDivider(m *model.ChatMessage, width int) string {
 	if m.DividerCount != 1 {
 		label += "s"
 	}
-	line := strings.Repeat("─", max(0, width-len(label)-4))
+	lineLen := max(0, width-len(label)-4)
+	line := strings.Repeat("─", lineLen)
 	return styles.StyleDivider.Render(line + label + " ↓")
 }
 
@@ -244,7 +239,6 @@ func formatTime(t time.Time) string {
 	return t.Format("15:04")
 }
 
-// wrapText soft-wraps text at width rune columns, preserving existing newlines.
 func wrapText(text string, width int) string {
 	if width <= 0 {
 		return text
@@ -274,11 +268,6 @@ func wrapText(text string, width int) string {
 	}
 	return strings.TrimRight(out.String(), "\n")
 }
-
-// Inline style for muted text (used in several renderers without a package-level var).
-var (
-	styleMuted = styles.StyleMuted
-)
 
 func min(a, b int) int {
 	if a < b {
