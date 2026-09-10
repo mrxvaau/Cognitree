@@ -135,12 +135,14 @@ type SlashEntry struct {
 func NewState() State {
 	ta := textarea.New()
 	ta.Placeholder = "Message Cognitree... (/ for commands)"
-	ta.Focus()
+	ta.Blur() // start blurred — welcome screen doesn't render the real input
 	ta.Prompt = "│ "
 	ta.SetHeight(2)
 	ta.ShowLineNumbers = false
 
 	return State{
+		Width:       80,
+		Height:      24,
 		Input:       ta,
 		AutoScroll:  true,
 		AlwaysAllow: make(map[string]bool),

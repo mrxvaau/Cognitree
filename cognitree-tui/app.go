@@ -51,7 +51,7 @@ func newApp(back *protocol.BackendProcess, initialModel string, provider string)
 }
 
 func (a App) Init() tea.Cmd {
-	return spinnerTick()
+	return nil
 }
 
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -63,14 +63,22 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		a.state.Width = msg.Width
 		a.state.Height = msg.Height
-		a.state.Input.SetWidth(max(msg.Width-4, 20))
+		if a.state.IsWelcomeScreen() {
+			a.state.Input.SetWidth(1)
+			a.state.Input.SetHeight(1)
+		} else {
+			a.state.Input.SetWidth(max(msg.Width-4, 20))
+		}
 		if !a.state.Ready {
 			a.state.Ready = true
-			a.state.Viewport = viewport.New(msg.Width, viewportHeight(msg.Height, a.state.IsWelcomeScreen()))
-			a.state.Viewport.SetContent(a.viewportContent())
+			a.state.Viewport = viewport.New(msg.Width, viewportHeight(msg.Height, true))
 		} else {
 			a.state.Viewport.Width = msg.Width
 			a.state.Viewport.Height = viewportHeight(msg.Height, a.state.IsWelcomeScreen())
+		}
+		// Keep textarea blurred while the welcome screen is showing.
+		if a.state.IsWelcomeScreen() {
+			a.state.Input.Blur()
 		}
 		return a, nil
 
@@ -79,7 +87,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if a.state.Streaming {
 			a.state.Spinner.Frame = (a.state.Spinner.Frame + 1) % len(spinnerFrames)
 		}
-		return a, spinnerTick()
+		if !a.state.IsWelcomeScreen() {
+			return a, spinnerTick()
+		}
+		return a, nil
 
 	// ── Backend line ─────────────────────────────────────────────────────────
 	case protocol.BackendMsg:
@@ -293,6 +304,9 @@ func (a App) handleKey(msg tea.KeyMsg, cmds *[]tea.Cmd) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	default:
+		if !a.state.Input.Focused() {
+			a.state.Input.Focus()
+		}
 		var taCmd tea.Cmd
 		a.state.Input, taCmd = a.state.Input.Update(msg)
 		*cmds = append(*cmds, taCmd)
@@ -546,16 +560,14 @@ func (a App) View() string {
 		return styles.StyleError.Render("\n  Fatal: " + a.state.FatalErr +
 			"\n  Press Ctrl+C to exit.\n")
 	}
-	// On welcome screen, bypass the viewport widget entirely —
-	// render welcome content directly so the viewport can't
-	// add its own padding/scrolling artifacts.
-	var vpContent string
 	if a.state.IsWelcomeScreen() {
-		vpContent = ui.RenderWelcome(&a.state)
-	} else {
-		vpContent = a.state.Viewport.View()
+		if !a.state.Ready {
+			return ""
+		}
+		return "\x1b[?25l" + ui.RenderWelcome(&a.state)
 	}
-	return ui.RenderLayout(&a.state, vpContent)
+	a.state.Viewport.SetContent(a.viewportContent())
+	return ui.RenderLayout(&a.state, a.state.Viewport.View())
 }
 
 func slashEntries(cmds []slash.Command) []model.SlashEntry {
