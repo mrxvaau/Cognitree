@@ -194,6 +194,13 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.ErrorMessage != "" {
 			a.state.Messages = append(a.state.Messages, model.NewErrorMsg(msg.ErrorMessage))
 			a.refreshViewport()
+		} else if msg.Result != "" {
+			a.state.Messages = append(a.state.Messages, model.ChatMessage{
+				Role:      model.RoleAssistant,
+				Content:   msg.Result,
+				Timestamp: time.Now(),
+			})
+			a.refreshViewport()
 		}
 		a.state.StatusMsg = ""
 		return a, nil

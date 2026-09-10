@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 )
 
@@ -58,6 +57,7 @@ type EvtPermissionRequest struct {
 // EvtTurnComplete — backend sent a result message (turn finished).
 type EvtTurnComplete struct {
 	Subtype      string
+	Result       string
 	ErrorMessage string
 	InputTokens  int
 	OutputTokens int
@@ -107,9 +107,35 @@ func Dispatch(line string) (interface{}, error) {
 			}
 			return EvtStatusMsg{Message: msg.Message}, nil
 
+		case "local_command":
+			var msg SystemLocalCommand
+			if err := json.Unmarshal(raw, &msg); err == nil && msg.Content != "" {
+				cleaned := CleanLocalCommandOutput(msg.Content)
+				if cleaned != "" {
+					return EvtAssistantText{Content: cleaned}, nil
+				}
+			}
+			return nil, nil
+
 		default:
 			return nil, nil // ignore other system subtypes
 		}
+
+	// ── User messages (Slash command outputs / replays) ───────────────────
+	case "user":
+		var u UserEnvelope
+		if err := json.Unmarshal(raw, &u); err == nil {
+			var strContent string
+			if json.Unmarshal(u.Message.Content, &strContent) == nil {
+				if strings.Contains(strContent, "<local-command-stdout>") || strings.Contains(strContent, "<local-command-stderr>") {
+					cleaned := CleanLocalCommandOutput(strContent)
+					if cleaned != "" {
+						return EvtAssistantText{UUID: u.UUID, Content: cleaned}, nil
+					}
+				}
+			}
+		}
+		return nil, nil
 
 	// ── Assistant turns ──────────────────────────────────────────────────
 	case "assistant":
@@ -162,6 +188,11 @@ func Dispatch(line string) (interface{}, error) {
 		evt := EvtTurnComplete{Subtype: r.Subtype}
 		if len(r.Errors) > 0 {
 			evt.ErrorMessage = strings.Join(r.Errors, "; ")
+		} else if r.Result != "" {
+			cleaned := CleanLocalCommandOutput(r.Result)
+			if cleaned != "" {
+				evt.Result = cleaned
+			}
 		}
 		if r.Usage != nil {
 			evt.InputTokens = r.Usage.InputTokens
@@ -218,11 +249,28 @@ func dispatchAssistant(msg AssistantEnvelope) interface{} {
 
 func prettyJSON(v interface{}) string {
 	if v == nil {
-		return ""
+		return "{}"
 	}
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
-		return fmt.Sprintf("%v", v)
+		return "{}"
 	}
 	return string(b)
+}
+
+// CleanLocalCommandOutput strips <local-command-stdout> or <local-command-stderr> XML tags.
+func CleanLocalCommandOutput(raw string) string {
+	s := raw
+	if idx := strings.Index(s, "<local-command-stdout>"); idx != -1 {
+		s = s[idx+len("<local-command-stdout>"):]
+		if end := strings.Index(s, "</local-command-stdout>"); end != -1 {
+			s = s[:end]
+		}
+	} else if idx := strings.Index(s, "<local-command-stderr>"); idx != -1 {
+		s = s[idx+len("<local-command-stderr>"):]
+		if end := strings.Index(s, "</local-command-stderr>"); end != -1 {
+			s = s[:end]
+		}
+	}
+	return strings.TrimSpace(s)
 }

@@ -168,6 +168,25 @@ type UsageInfo struct {
 	OutputTokens int `json:"output_tokens"`
 }
 
+// UserEnvelope — type: "user" (e.g., local command stdout/stderr responses, synthetic user messages).
+type UserEnvelope struct {
+	Type    string          `json:"type"`
+	Message UserEnvelopeMsg `json:"message"`
+	UUID    string          `json:"uuid"`
+}
+
+type UserEnvelopeMsg struct {
+	Role    string          `json:"role"`
+	Content json.RawMessage `json:"content"`
+}
+
+// SystemLocalCommand — type: "system", subtype: "local_command".
+type SystemLocalCommand struct {
+	Type    string `json:"type"`
+	Subtype string `json:"subtype"`
+	Content string `json:"content"`
+}
+
 // --- Tool result (embedded in user turn content) ---
 
 // ToolResultBlock appears inside a user turn's content array
