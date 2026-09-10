@@ -514,7 +514,7 @@ func (a *App) viewportContent() string {
 	if a.state.ShowContext {
 		return ui.RenderContextVisualization(&a.state, a.state.Width)
 	}
-	if !a.state.HasMessages() && !a.state.Streaming {
+	if a.state.IsWelcomeScreen() {
 		return ui.RenderWelcome(&a.state)
 	}
 	return ui.RenderMessages(
