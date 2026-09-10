@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -52,10 +51,7 @@ func newApp(back *protocol.BackendProcess, initialModel string, provider string)
 }
 
 func (a App) Init() tea.Cmd {
-	return tea.Batch(
-		textarea.Blink,
-		spinnerTick(),
-	)
+	return spinnerTick()
 }
 
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -550,7 +546,16 @@ func (a App) View() string {
 		return styles.StyleError.Render("\n  Fatal: " + a.state.FatalErr +
 			"\n  Press Ctrl+C to exit.\n")
 	}
-	return ui.RenderLayout(&a.state, a.state.Viewport.View())
+	// On welcome screen, bypass the viewport widget entirely —
+	// render welcome content directly so the viewport can't
+	// add its own padding/scrolling artifacts.
+	var vpContent string
+	if a.state.IsWelcomeScreen() {
+		vpContent = ui.RenderWelcome(&a.state)
+	} else {
+		vpContent = a.state.Viewport.View()
+	}
+	return ui.RenderLayout(&a.state, vpContent)
 }
 
 func slashEntries(cmds []slash.Command) []model.SlashEntry {
