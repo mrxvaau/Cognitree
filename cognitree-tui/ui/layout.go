@@ -72,12 +72,15 @@ func RenderLayout(s *model.State, viewportContent string) string {
 		sb.WriteString(addDirDialog)
 		sb.WriteByte('\n')
 	}
-	if inputHint != "" {
-		sb.WriteString(inputHint)
+	// Hide real input bar on welcome screen — the decorative preview in welcome.go replaces it.
+	if !s.IsWelcomeScreen() {
+		if inputHint != "" {
+			sb.WriteString(inputHint)
+			sb.WriteByte('\n')
+		}
+		sb.WriteString(inputBar)
 		sb.WriteByte('\n')
 	}
-	sb.WriteString(inputBar)
-	sb.WriteByte('\n')
 	sb.WriteString(statusBar)
 
 	return sb.String()

@@ -39,9 +39,10 @@ type App struct {
 	slashReg *slash.Registry
 }
 
-func newApp(back *protocol.BackendProcess, initialModel string) App {
+func newApp(back *protocol.BackendProcess, initialModel string, provider string) App {
 	s := model.NewState()
 	s.Session.ModelName = initialModel
+	s.Session.Provider = provider
 
 	return App{
 		state:    s,

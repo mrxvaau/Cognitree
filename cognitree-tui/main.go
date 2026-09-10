@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"cognitree-tui/protocol"
+	"cognitree-tui/util"
 )
 
 func main() {
@@ -99,8 +100,11 @@ func main() {
 	}
 	defer backend.Kill()
 
-	// ── Create the App ─────────────────────────────────────────────────────────
-	app := newApp(backend, effectiveModel)
+	// ── Extract provider name from LLM_BASE_URL ──────────────────────────────────
+	provider := util.ExtractProvider(getEnvVal(envOverrides, "LLM_BASE_URL"))
+
+	// ── Create the App ─────────────────────────────────────────────────────────────────
+	app := newApp(backend, effectiveModel, provider)
 
 	// ── Create Bubble Tea program ──────────────────────────────────────────────
 	p := tea.NewProgram(app,

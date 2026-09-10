@@ -12,15 +12,23 @@ import (
 	"cognitree-tui/styles"
 )
 
-// RenderWelcome renders a minimal OpenCode-style welcome screen:
+// RenderWelcome renders a minimal, clean welcome screen.
 //
-//	[logo: "cogni" white + "tree" green, large]
+// Layout (top → bottom):
+//
+//	[vertical padding]
+//	[empty line]
+//	[empty line]
+//	[logo: "c o g n i" white + "t r e e" green, letter-spaced, bold]
+//	[empty line]
 //	[subtitle: YOUR CODING PARTNER THAT REMEMBERS]
-//	[empty]
-//	[input preview box: left green border, dark bg]
-//	[empty]
-//	[keybindings: right-aligned]
-//	[tip: centered]
+//	[empty line]
+//	[empty line]
+//	[input preview box: left green bar, dark bg]
+//	[empty line]
+//	[keybindings: right-aligned under box]
+//	[vertical padding]
+//	[tip: centered at bottom]
 func RenderWelcome(s *model.State) string {
 	if s.Width <= 0 {
 		return ""
@@ -35,15 +43,18 @@ func RenderWelcome(s *model.State) string {
 		boxWidth = 40
 	}
 
-	// ── 1. Logo — "cogni" white bold + "tree" green bold ─────────────────────
-	cogni := styles.StyleWelcomeLogoWhite.Render("cogni")
-	tree := styles.StyleWelcomeLogoGreen.Render("tree")
-	logo := cogni + tree
+	// ── 1. Logo — letter-spaced "c o g n i" white + "t r e e" green ─────────
+	// Letter spacing by inserting spaces between each character.
+	cogniSpaced := letterSpace("cogni")
+	treeSpaced := letterSpace("tree")
+	cogniPart := styles.StyleWelcomeLogoWhite.Render(cogniSpaced)
+	treePart := styles.StyleWelcomeLogoGreen.Render(treeSpaced)
+	logo := cogniPart + "  " + treePart // two spaces between the words
 
-	// ── 2. Subtitle (letter-spaced simulation) ────────────────────────────────
+	// ── 2. Subtitle ───────────────────────────────────────────────────────────
 	subtitle := styles.StyleWelcomeKeyMuted.Render("Y O U R   C O D I N G   P A R T N E R   T H A T   R E M E M B E R S")
 
-	// ── 3. Memory check (silent — only show if active) ───────────────────────
+	// ── 3. Memory check (silent — show only if active) ───────────────────────
 	hasMemory := false
 	cwd := s.Session.Cwd
 	if cwd == "" {
@@ -57,10 +68,14 @@ func RenderWelcome(s *model.State) string {
 		hasMemory = true
 	}
 
-	// ── 4. Model name ─────────────────────────────────────────────────────────
+	// ── 4. Model + Provider ───────────────────────────────────────────────────
 	modelName := s.Session.ModelName
 	if modelName == "" || modelName == "..." {
 		modelName = "connecting…"
+	}
+	provider := s.Session.Provider
+	if provider == "" {
+		provider = "anthropic"
 	}
 
 	// ── 5. Input preview box ──────────────────────────────────────────────────
@@ -69,15 +84,14 @@ func RenderWelcome(s *model.State) string {
 	buildLabel := styles.StyleWelcomeLogoGreen.Render("Build")
 	dot := styles.StyleWelcomeKeyMuted.Render("·")
 	modelLabel := styles.StyleWelcomeLogoWhite.Render(modelName)
-	engineLabel := styles.StyleWelcomeKeyMuted.Render("Experimental Labs")
-	metaLine := fmt.Sprintf("%s %s %s   %s", buildLabel, dot, modelLabel, engineLabel)
+	providerLabel := styles.StyleWelcomeKeyMuted.Render(provider)
+	metaLine := fmt.Sprintf("%s %s %s   %s", buildLabel, dot, modelLabel, providerLabel)
 
 	if hasMemory {
 		memBadge := styles.StyleWelcomeLogoGreen.Render("● memory active")
 		metaLine = metaLine + "   " + memBadge
 	}
 
-	// inner content of box: placeholder + blank + meta
 	boxInner := lipgloss.JoinVertical(
 		lipgloss.Left,
 		placeholderLine,
@@ -85,13 +99,11 @@ func RenderWelcome(s *model.State) string {
 		metaLine,
 	)
 
-	// Render box: left-only thick green border, dark bg, width-constrained
-	// We set inner width = boxWidth minus the left border (1) and padding (2+2)
+	// inner width = boxWidth minus left border (1) + left padding (2) + right padding (2)
 	innerWidth := boxWidth - 5
 	if innerWidth < 20 {
 		innerWidth = 20
 	}
-
 	inputBox := styles.StyleWelcomeInputBox.
 		Width(innerWidth).
 		Render(boxInner)
@@ -110,7 +122,7 @@ func RenderWelcome(s *model.State) string {
 		Align(lipgloss.Right).
 		Render(kb)
 
-	// ── 7. Tip row (centered to boxWidth) ────────────────────────────────────
+	// ── 7. Tip row ────────────────────────────────────────────────────────────
 	tip := fmt.Sprintf("%s  %s  %s",
 		styles.StyleWelcomeLogoGreen.Render("●"),
 		styles.StyleWelcomeTipGreen.Render("Tip"),
@@ -122,18 +134,20 @@ func RenderWelcome(s *model.State) string {
 		Render(tip)
 
 	// ── 8. Center each element horizontally in the terminal ──────────────────
-	centerStyle := lipgloss.NewStyle().Width(s.Width).Align(lipgloss.Center)
-	rightStyle := lipgloss.NewStyle().Width(s.Width).Align(lipgloss.Center)
+	center := lipgloss.NewStyle().Width(s.Width).Align(lipgloss.Center)
 
-	centeredLogo := centerStyle.Render(logo)
-	centeredSubtitle := centerStyle.Render(subtitle)
-	centeredBox := centerStyle.Render(inputBox)
-	centeredKeys := rightStyle.Render(keybindings)
-	centeredTip := centerStyle.Render(tipRow)
+	centeredLogo := center.Render(logo)
+	centeredSubtitle := center.Render(subtitle)
+	centeredBox := center.Render(inputBox)
+	centeredKeys := center.Render(keybindings)
+	centeredTip := center.Render(tipRow)
 
-	// ── 9. Stack elements ────────────────────────────────────────────────────
+	// ── 9. Stack: logo has 2 blank lines above+below for perceived size ───────
 	stacked := strings.Join([]string{
+		"",         // breathing room above logo
+		"",         // breathing room above logo
 		centeredLogo,
+		"",         // breathing room below logo
 		centeredSubtitle,
 		"",
 		"",
@@ -142,11 +156,11 @@ func RenderWelcome(s *model.State) string {
 		centeredKeys,
 	}, "\n")
 
-	// ── 10. Vertical centering (upper third) ─────────────────────────────────
+	// ── 10. Vertical centering ────────────────────────────────────────────────
 	contentLines := strings.Split(stacked, "\n")
 	contentHeight := len(contentLines)
 
-	// reserve 3 rows at bottom for tip + breathing room
+	// Reserve 3 rows at bottom for tip + spacing
 	availH := s.Height - 4
 	topPad := (availH - contentHeight) / 3
 	if topPad < 0 {
@@ -158,9 +172,19 @@ func RenderWelcome(s *model.State) string {
 		out.WriteByte('\n')
 	}
 	out.WriteString(stacked)
-	// tip pinned near bottom with some gap
 	out.WriteString("\n\n")
 	out.WriteString(centeredTip)
 
 	return out.String()
+}
+
+// letterSpace inserts a space between every character in s.
+// "cogni" → "c o g n i"
+func letterSpace(s string) string {
+	runes := []rune(s)
+	parts := make([]string, len(runes))
+	for i, r := range runes {
+		parts[i] = string(r)
+	}
+	return strings.Join(parts, " ")
 }

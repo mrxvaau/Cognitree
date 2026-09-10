@@ -38,6 +38,7 @@ type Session struct {
 	ModelName string
 	Cwd       string
 	Version   string
+	Provider  string // extracted from LLM_BASE_URL, e.g. "openai", "anthropic"
 }
 
 // ─── Spinner State ────────────────────────────────────────────────────────────
@@ -155,6 +156,12 @@ func (s *State) IsIdle() bool {
 
 func (s *State) HasMessages() bool {
 	return len(s.Messages) > 0
+}
+
+// IsWelcomeScreen returns true when the welcome screen should be shown
+// (no messages yet and not streaming).
+func (s *State) IsWelcomeScreen() bool {
+	return !s.HasMessages() && !s.Streaming
 }
 
 func (s *State) LastMessageTime() time.Time {
